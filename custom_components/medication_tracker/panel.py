@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 from pathlib import Path
 
 from homeassistant.components import frontend, panel_custom
@@ -11,6 +12,8 @@ from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 
+_LOGGER = logging.getLogger(__name__)
+
 PANEL_URL = f"/api/{DOMAIN}"
 PANEL_TITLE = "Medication Tracker"
 PANEL_ICON = "mdi:pill"
@@ -18,6 +21,11 @@ PANEL_ICON = "mdi:pill"
 
 async def async_register_panel(hass: HomeAssistant) -> None:
     """Register the Medication Tracker panel."""
+    # Check if panel is already registered
+    if DOMAIN in hass.data.get("frontend_panels", {}):
+        _LOGGER.debug("Panel already registered, skipping")
+        return
+
     # Register the static files
     panel_dir = Path(__file__).parent / "panel"
 

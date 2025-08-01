@@ -95,6 +95,11 @@ UPDATE_MEDICATION_SCHEMA = vol.Schema(
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Set up services for Medication Tracker."""
 
+    # Check if services are already registered to avoid duplicates
+    if hass.services.has_service(DOMAIN, SERVICE_TAKE_MEDICATION):
+        _LOGGER.debug("Services already registered, skipping setup")
+        return
+
     async def handle_take_medication(call: ServiceCall) -> None:
         """Handle take medication service call."""
         medication_id = call.data[ATTR_MEDICATION_ID]
@@ -243,11 +248,11 @@ def _get_all_coordinators(hass: HomeAssistant) -> list[MedicationCoordinator]:
     if DOMAIN not in hass.data:
         return []
 
-    coordinators = []
-    for coordinator in hass.data[DOMAIN].values():
-        if isinstance(coordinator, MedicationCoordinator):
-            coordinators.append(coordinator)
-    return coordinators
+    return [
+        coordinator
+        for coordinator in hass.data[DOMAIN].values()
+        if isinstance(coordinator, MedicationCoordinator)
+    ]
 
 
 async def async_unload_services(hass: HomeAssistant) -> None:

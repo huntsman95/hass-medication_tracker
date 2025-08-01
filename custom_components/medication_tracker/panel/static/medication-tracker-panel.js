@@ -115,41 +115,15 @@ class MedicationTrackerPanel extends LitElement {
       }
 
       .add-button:hover {
-        background: var(--primary-color-dark);
+        -moz-box-shadow: inset 0 0 100px 100px rgba(255, 255, 255, 0.3);
+        -webkit-box-shadow: inset 0 0 100px 100px rgba(255, 255, 255, 0.3);
+        box-shadow: inset 0 0 100px 100px rgba(255, 255, 255, 0.3);
       }
 
       .header-buttons {
         display: flex;
         gap: 12px;
         align-items: center;
-      }
-
-      .refresh-button {
-        background: var(--secondary-background-color);
-        color: var(--primary-text-color);
-        border: 1px solid var(--divider-color);
-        border-radius: 4px;
-        padding: 12px 20px;
-        font-size: 14px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        transition: all 0.2s ease;
-      }
-
-      .refresh-button:hover {
-        background: var(--primary-color);
-        color: var(--text-primary-color);
-        border-color: var(--primary-color);
-      }
-
-      .refresh-button ha-icon {
-        transition: transform 0.3s ease;
-      }
-
-      .refresh-button:active ha-icon {
-        transform: rotate(180deg);
       }
 
       .medications-grid {
@@ -257,6 +231,12 @@ class MedicationTrackerPanel extends LitElement {
         cursor: pointer;
         font-size: 0.9em;
         font-weight: 500;
+      }
+
+      .action-button:hover {
+        -moz-box-shadow: inset 0 0 100px 100px rgba(255, 255, 255, 0.3);
+        -webkit-box-shadow: inset 0 0 100px 100px rgba(255, 255, 255, 0.3);
+        box-shadow: inset 0 0 100px 100px rgba(255, 255, 255, 0.3);
       }
 
       .take-button {

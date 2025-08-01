@@ -44,6 +44,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
+    # Ensure services are set up (will be no-op if already registered)
+    await async_setup_services(hass)
+
+    # Ensure panel is registered (will be no-op if already registered)
+    await async_register_panel(hass)
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
@@ -54,10 +60,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
 
-        # If this is the last entry, unload services but NOT the panel
-        # Panel should persist across entry reloads
-        if not hass.data[DOMAIN]:
-            await async_unload_services(hass)
+        # Since only one config entry is allowed, always unload services when unloading
+        # Panel is NOT unregistered here - only in async_remove_entry
+        await async_unload_services(hass)
 
     return unload_ok
 
@@ -70,17 +75,6 @@ async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Remove a config entry."""
-    # Check if this is the last entry being removed
-    if (
-        len(
-            [
-                e
-                for e in hass.config_entries.async_entries(DOMAIN)
-                if e.entry_id != entry.entry_id
-            ]
-        )
-        == 0
-    ):
-        # This is the last entry, clean up services and panel
-        await async_unload_services(hass)
-        await async_unregister_panel(hass)
+    # Since only one config entry is allowed, always clean up services and panel when removing
+    await async_unload_services(hass)
+    await async_unregister_panel(hass)
