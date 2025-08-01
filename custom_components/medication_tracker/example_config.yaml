@@ -1,0 +1,71 @@
+# Example configuration for Medication Tracker integration
+#
+# This integration is configured through the UI, but here are some examples
+# of how to use it in automations and Lovelace cards.
+
+# Example automation to remind when medication is due
+automation:
+  - id: medication_due_notification
+    alias: "Medication Due Notification"
+    description: "Send notification when medication is due"
+    trigger:
+      - platform: state
+        entity_id:
+          - binary_sensor.medication_due  # Replace with actual entity
+        to: "on"
+    action:
+      - service: notify.persistent_notification
+        data:
+          title: "Medication Reminder"
+          message: "It's time to take your {{ trigger.to_state.attributes.medication_name }}!"
+
+  - id: medication_overdue_alert
+    alias: "Medication Overdue Alert"
+    description: "Alert when medication is overdue"
+    trigger:
+      - platform: state
+        entity_id:
+          - sensor.medication_status  # Replace with actual entity
+        to: "overdue"
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "Medication Overdue!"
+          message: "You missed your {{ trigger.to_state.attributes.medication_name }}. Please take it now."
+          data:
+            actions:
+              - action: "TAKE_MEDICATION"
+                title: "Mark as Taken"
+              - action: "SKIP_MEDICATION"
+                title: "Skip Dose"
+
+# Example Lovelace card configuration
+# type: entities
+# title: Medication Tracker
+# entities:
+#   - entity: sensor.vitamin_d_status
+#     name: Vitamin D Status
+#   - entity: sensor.vitamin_d_adherence
+#     name: Adherence Rate
+#   - entity: binary_sensor.vitamin_d_due
+#     name: Due Alert
+#   - type: divider
+#   - entity: button.take_vitamin_d
+#   - entity: button.skip_vitamin_d
+
+# Example service calls for adding medications
+# service: medication_tracker.add_medication
+# data:
+#   name: "Vitamin D"
+#   dosage: "1000 IU"
+#   frequency: "daily"
+#   times: ["09:00"]
+#   notes: "Take with breakfast"
+
+# service: medication_tracker.add_medication
+# data:
+#   name: "Blood Pressure Medication"
+#   dosage: "5mg"
+#   frequency: "daily"
+#   times: ["08:00", "20:00"]
+#   notes: "Take twice daily"

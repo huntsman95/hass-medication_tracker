@@ -1,0 +1,144 @@
+take_medication:
+  name: Take Medication
+  description: Mark a medication as taken.
+  fields:
+    medication_id:
+      name: Medication ID
+      description: The ID of the medication to mark as taken.
+      required: true
+      selector:
+        text:
+
+skip_medication:
+  name: Skip Medication
+  description: Mark a medication as skipped.
+  fields:
+    medication_id:
+      name: Medication ID
+      description: The ID of the medication to mark as skipped.
+      required: true
+      selector:
+        text:
+
+add_medication:
+  name: Add Medication
+  description: Add a new medication to track.
+  fields:
+    name:
+      name: Medication Name
+      description: The name of the medication.
+      required: true
+      selector:
+        text:
+    dosage:
+      name: Dosage
+      description: The dosage information (e.g., "10mg", "2 tablets").
+      required: true
+      selector:
+        text:
+    frequency:
+      name: Frequency
+      description: How often to take the medication.
+      required: true
+      selector:
+        select:
+          options:
+            - daily
+            - weekly
+            - monthly
+            - as_needed
+    times:
+      name: Times
+      description: Times to take the medication (24-hour format, e.g., "09:00").
+      required: false
+      selector:
+        object:
+    start_date:
+      name: Start Date
+      description: The date to start taking this medication (optional).
+      required: false
+      selector:
+        date:
+    end_date:
+      name: End Date
+      description: The date to stop taking this medication (optional).
+      required: false
+      selector:
+        date:
+    notes:
+      name: Notes
+      description: Optional notes about the medication.
+      required: false
+      selector:
+        text:
+          multiline: true
+
+remove_medication:
+  name: Remove Medication
+  description: Remove a medication from tracking.
+  fields:
+    medication_id:
+      name: Medication ID
+      description: The ID of the medication to remove.
+      required: true
+      selector:
+        text:
+
+update_medication:
+  name: Update Medication
+  description: Update an existing medication's information.
+  fields:
+    medication_id:
+      name: Medication ID
+      description: The ID of the medication to update.
+      required: true
+      selector:
+        text:
+    name:
+      name: Medication Name
+      description: The name of the medication (optional - will keep existing if not provided).
+      required: false
+      selector:
+        text:
+    dosage:
+      name: Dosage
+      description: The dosage information (optional - will keep existing if not provided).
+      required: false
+      selector:
+        text:
+    frequency:
+      name: Frequency
+      description: How often to take the medication (optional - will keep existing if not provided).
+      required: false
+      selector:
+        select:
+          options:
+            - daily
+            - weekly
+            - monthly
+            - as_needed
+    times:
+      name: Times
+      description: Times to take the medication (optional - will keep existing if not provided).
+      required: false
+      selector:
+        object:
+    start_date:
+      name: Start Date
+      description: The date to start taking this medication (optional - will keep existing if not provided).
+      required: false
+      selector:
+        date:
+    end_date:
+      name: End Date
+      description: The date to stop taking this medication (optional - will keep existing if not provided).
+      required: false
+      selector:
+        date:
+    notes:
+      name: Notes
+      description: Optional notes about the medication (optional - will keep existing if not provided).
+      required: false
+      selector:
+        text:
+          multiline: true

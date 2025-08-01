@@ -1,0 +1,82 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Medication Tracker",
+                "description": "Set up the Medication Tracker integration to monitor your medications and adherence."
+            }
+        },
+        "error": {
+            "unknown": "Unexpected error occurred."
+        },
+        "abort": {
+            "already_configured": "Medication Tracker is already configured."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Medication Tracker Options",
+                "description": "Configure options for the Medication Tracker integration."
+            }
+        }
+    },
+    "services": {
+        "take_medication": {
+            "name": "Take Medication",
+            "description": "Mark a medication as taken.",
+            "fields": {
+                "medication_id": {
+                    "name": "Medication ID",
+                    "description": "The ID of the medication to mark as taken."
+                }
+            }
+        },
+        "skip_medication": {
+            "name": "Skip Medication",
+            "description": "Mark a medication as skipped.",
+            "fields": {
+                "medication_id": {
+                    "name": "Medication ID",
+                    "description": "The ID of the medication to mark as skipped."
+                }
+            }
+        },
+        "add_medication": {
+            "name": "Add Medication",
+            "description": "Add a new medication to track.",
+            "fields": {
+                "name": {
+                    "name": "Medication Name",
+                    "description": "The name of the medication."
+                },
+                "dosage": {
+                    "name": "Dosage",
+                    "description": "The dosage information (e.g., '10mg', '2 tablets')."
+                },
+                "frequency": {
+                    "name": "Frequency",
+                    "description": "How often to take the medication."
+                },
+                "times": {
+                    "name": "Times",
+                    "description": "List of times to take the medication (e.g., ['09:00', '21:00'])."
+                },
+                "notes": {
+                    "name": "Notes",
+                    "description": "Optional notes about the medication."
+                }
+            }
+        },
+        "remove_medication": {
+            "name": "Remove Medication",
+            "description": "Remove a medication from tracking.",
+            "fields": {
+                "medication_id": {
+                    "name": "Medication ID",
+                    "description": "The ID of the medication to remove."
+                }
+            }
+        }
+    }
+}
