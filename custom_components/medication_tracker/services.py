@@ -8,26 +8,28 @@ import voluptuous as vol
 
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
+from homeassistant.util import dt as dt_util
 
 from .const import (
+    ATTR_DATETIME,
+    ATTR_MEDICATION_ID,
+    CONF_DOSAGE,
+    CONF_END_DATE,
+    CONF_FREQUENCY,
+    CONF_MEDICATION_NAME,
+    CONF_NOTES,
+    CONF_START_DATE,
+    CONF_TIMES,
     DOMAIN,
-    SERVICE_TAKE_MEDICATION,
-    SERVICE_SKIP_MEDICATION,
+    FREQUENCY_AS_NEEDED,
+    FREQUENCY_DAILY,
+    FREQUENCY_MONTHLY,
+    FREQUENCY_WEEKLY,
     SERVICE_ADD_MEDICATION,
     SERVICE_REMOVE_MEDICATION,
+    SERVICE_SKIP_MEDICATION,
+    SERVICE_TAKE_MEDICATION,
     SERVICE_UPDATE_MEDICATION,
-    ATTR_MEDICATION_ID,
-    CONF_MEDICATION_NAME,
-    CONF_DOSAGE,
-    CONF_FREQUENCY,
-    CONF_TIMES,
-    CONF_START_DATE,
-    CONF_END_DATE,
-    CONF_NOTES,
-    FREQUENCY_DAILY,
-    FREQUENCY_WEEKLY,
-    FREQUENCY_MONTHLY,
-    FREQUENCY_AS_NEEDED,
 )
 from .coordinator import MedicationCoordinator
 from .models import MedicationData
@@ -37,12 +39,14 @@ _LOGGER = logging.getLogger(__name__)
 TAKE_MEDICATION_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_MEDICATION_ID): cv.string,
+        vol.Optional(ATTR_DATETIME): cv.datetime,
     }
 )
 
 SKIP_MEDICATION_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_MEDICATION_ID): cv.string,
+        vol.Optional(ATTR_DATETIME): cv.datetime,
     }
 )
 
@@ -103,21 +107,31 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     async def handle_take_medication(call: ServiceCall) -> None:
         """Handle take medication service call."""
         medication_id = call.data[ATTR_MEDICATION_ID]
+        taken_at = call.data.get(ATTR_DATETIME)
+
+        # Convert naive datetime to timezone-aware datetime if needed
+        if taken_at is not None and taken_at.tzinfo is None:
+            taken_at = dt_util.as_local(taken_at)
 
         # Find the coordinator for this medication
         coordinator = _get_coordinator_for_medication(hass, medication_id)
         if coordinator:
-            await coordinator.async_take_medication(medication_id)
+            await coordinator.async_take_medication(medication_id, taken_at)
         else:
             _LOGGER.error("Medication %s not found", medication_id)
 
     async def handle_skip_medication(call: ServiceCall) -> None:
         """Handle skip medication service call."""
         medication_id = call.data[ATTR_MEDICATION_ID]
+        skipped_at = call.data.get(ATTR_DATETIME)
+
+        # Convert naive datetime to timezone-aware datetime if needed
+        if skipped_at is not None and skipped_at.tzinfo is None:
+            skipped_at = dt_util.as_local(skipped_at)
 
         coordinator = _get_coordinator_for_medication(hass, medication_id)
         if coordinator:
-            await coordinator.async_skip_medication(medication_id)
+            await coordinator.async_skip_medication(medication_id, skipped_at)
         else:
             _LOGGER.error("Medication %s not found", medication_id)
 

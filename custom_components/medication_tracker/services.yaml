@@ -8,6 +8,12 @@ take_medication:
       required: true
       selector:
         text:
+    datetime:
+      name: Date & Time
+      description: When the medication was taken (optional - defaults to now).
+      required: false
+      selector:
+        datetime:
 
 skip_medication:
   name: Skip Medication
@@ -19,6 +25,12 @@ skip_medication:
       required: true
       selector:
         text:
+    datetime:
+      name: Date & Time
+      description: When the medication was skipped (optional - defaults to now).
+      required: false
+      selector:
+        datetime:
 
 add_medication:
   name: Add Medication

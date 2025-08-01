@@ -31,6 +31,7 @@ SERVICE_UPDATE_MEDICATION: Final = "update_medication"
 
 # Attributes
 ATTR_MEDICATION_ID: Final = "medication_id"
+ATTR_DATETIME: Final = "datetime"
 ATTR_DEVICE_ID: Final = "device_id"
 ATTR_TAKEN_AT: Final = "taken_at"
 ATTR_SKIPPED_AT: Final = "skipped_at"
