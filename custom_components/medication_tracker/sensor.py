@@ -114,6 +114,7 @@ class MedicationStatusSensor(CoordinatorEntity, SensorEntity):
         medication = medications[self._medication_id]
         attributes = {
             "medication_name": medication.data.name,
+            "medication_id": self._medication_id,  # Include the actual UUID for JavaScript fallback
             "dosage": medication.data.dosage,
             "frequency": medication.data.frequency,
             "times": medication.data.times,

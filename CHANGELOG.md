@@ -1,3 +1,6 @@
+v1.2.0
+- Use UUID's as medication ID's to avoid sensor re-use on delete/add of new medications
+
 v1.1.0
 - Fixed a bug where reloading the integration would not reregister services effectively breaking it until a HASS restart
 - Fixed a bug where removing and re-adding the integration would not reregister the UI panel

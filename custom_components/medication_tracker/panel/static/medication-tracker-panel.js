@@ -452,32 +452,68 @@ class MedicationTrackerPanel extends LitElement {
 
       console.log("Found status entities:", entities);
 
+      // Debug: let's see what ID sensors exist
+      const allIdSensors = Object.keys(this.hass.states).filter(id =>
+        id.startsWith("sensor.") && id.endsWith("_id")
+      );
+      console.log("All ID sensors found:", allIdSensors);
+
       const medications = [];
       for (const entityId of entities) {
         const state = this.hass.states[entityId];
         if (state.attributes.medication_name) {
-          // Extract the base medication identifier from entity name
-          const baseMedicationId = entityId.replace("sensor.", "").replace("_status", "");
+          // For duplicate names, Home Assistant generates IDs like:
+          // - sensor.jklhi_status -> sensor.jklhi_status_2
+          // - sensor.jklhi_id -> sensor.jklhi_id_2
+          // The pattern is that the suffix (_2, _3, etc.) goes at the very end
 
-          // Try to get the actual medication ID from the ID sensor
-          const idSensor = this.hass.states[`sensor.${baseMedicationId}_id`];
-          const adherenceSensor = this.hass.states[`sensor.${baseMedicationId}_adherence`];
-          const dueSensor = this.hass.states[`binary_sensor.${baseMedicationId}_due`];
+          let baseName, suffix = "";
+          const entityWithoutDomain = entityId.replace("sensor.", "");
 
-          // The actual medication ID should be from the ID sensor state, or check if it's in the status attributes
-          let actualMedicationId = idSensor?.state;
-
-          // If ID sensor doesn't have the right format, check if the status sensor has medication_id attribute
-          if (!actualMedicationId || actualMedicationId === baseMedicationId) {
-            // Look for medication_id in the status sensor attributes
-            actualMedicationId = state.attributes.medication_id || baseMedicationId;
+          // Check if this is a duplicate (has _status_N pattern)
+          const statusDuplicateMatch = entityWithoutDomain.match(/^(.+)_status_(\d+)$/);
+          if (statusDuplicateMatch) {
+            // This is a duplicate: "name_status_2" -> baseName="name", suffix="_2"
+            baseName = statusDuplicateMatch[1];
+            suffix = `_${statusDuplicateMatch[2]}`;
+          } else {
+            // This is the first instance: "name_status" -> baseName="name", suffix=""
+            baseName = entityWithoutDomain.replace("_status", "");
           }
 
-          console.log("Entity:", entityId, "Base ID:", baseMedicationId, "Actual ID:", actualMedicationId, "ID Sensor State:", idSensor?.state);
+          // Construct the related entity IDs with correct suffix placement
+          const idSensorId = `sensor.${baseName}_id${suffix}`;
+          const adherenceSensorId = `sensor.${baseName}_adherence${suffix}`;
+          const dueSensorId = `binary_sensor.${baseName}_due${suffix}`;
+
+          console.log(`Mapping ${entityId} -> ID sensor: ${idSensorId}`);
+
+          const idSensor = this.hass.states[idSensorId];
+          const adherenceSensor = this.hass.states[adherenceSensorId];
+          const dueSensor = this.hass.states[dueSensorId];
+
+          // The actual medication ID should ALWAYS be from the ID sensor state (UUID)
+          // This is critical for duplicate medication names where entity IDs get _2, _3, etc
+          let actualMedicationId = idSensor?.state;
+
+          // Only fall back if ID sensor is truly unavailable, empty, or in error state
+          if (!actualMedicationId || actualMedicationId === "unknown" || actualMedicationId === "unavailable" || actualMedicationId === "null") {
+            // Fallback to medication_id in the status sensor attributes, then base ID as last resort
+            actualMedicationId = state.attributes.medication_id || `${baseName}${suffix}`;
+            console.warn("ID sensor unavailable for", entityId, "falling back to:", actualMedicationId);
+          }
+
+          console.log("Entity:", entityId, "Base:", baseName, "Suffix:", suffix, "Actual ID:", actualMedicationId, "ID Sensor:", idSensor?.state);
+
+          // Validate that we have a proper UUID (basic check)
+          const isUUID = actualMedicationId && actualMedicationId.length > 10 && actualMedicationId.includes('-');
+          if (!isUUID) {
+            console.warn("Warning: Medication ID doesn't look like a UUID:", actualMedicationId, "for entity:", entityId);
+          }
 
           medications.push({
             // Use the actual medication ID for service calls
-            id: actualMedicationId, // This should be like "med_1", "med_2", etc.
+            id: actualMedicationId, // This should be a UUID (e.g., "12345678-1234-1234-1234-123456789abc")
             displayId: idSensor?.state || actualMedicationId, // This is what we show to the user
             name: state.attributes.medication_name,
             status: state.state,

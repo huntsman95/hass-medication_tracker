@@ -6,9 +6,14 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 import logging
 from typing import Any
+import uuid
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.device_registry import (
+    async_get as async_get_device_registry,
+)
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -86,7 +91,7 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_add_medication(self, medication_data: MedicationData) -> str:
         """Add a new medication."""
         medication = MedicationEntry(
-            id=f"med_{len(self._medications) + 1}",
+            id=str(uuid.uuid4()),
             data=medication_data,
         )
         self._medications[medication.id] = medication
@@ -167,8 +172,6 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_remove_entities_for_medication(self, medication_id: str) -> None:
         """Remove entities for a medication across all platforms."""
         # Get the entity registry to remove entities
-        from homeassistant.helpers import entity_registry as er
-
         entity_registry = er.async_get(self.hass)
 
         # Find and remove all entities for this medication
@@ -221,10 +224,6 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self, medication: MedicationEntry
     ) -> None:
         """Create a device for a medication."""
-        from homeassistant.helpers.device_registry import (
-            async_get as async_get_device_registry,
-        )
-
         device_registry = async_get_device_registry(self.hass)
 
         device_registry.async_get_or_create(
@@ -238,10 +237,6 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_remove_device_for_medication(self, medication_id: str) -> None:
         """Remove a device for a medication."""
-        from homeassistant.helpers.device_registry import (
-            async_get as async_get_device_registry,
-        )
-
         device_registry = async_get_device_registry(self.hass)
         medication = self._medications.get(medication_id)
 
