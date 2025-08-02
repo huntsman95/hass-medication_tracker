@@ -1,3 +1,9 @@
+v1.2.1
+- Added optional datetime parameter to take/skip service calls to accurately record dose time if recording happens in the future after taking a medication.
+
+- Known Bugs:
+    - "Taking" or "Skipping" a medication in the past - prior to your most recent dose - will set your most recent dose to that past time due to the ordering in local storage. This will be addressed in a future release by sorting JSON objects first before processing.
+
 v1.2.0
 - Use UUID's as medication ID's to avoid sensor re-use on delete/add of new medications
 
