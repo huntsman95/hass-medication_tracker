@@ -171,21 +171,27 @@ class MedicationEntry:
     def update_status(self, current_time: datetime) -> None:
         """Update the current status of the medication."""
         # Check if medication is outside its active date range
-        current_date = current_time.date()
+        current_local = dt_util.as_local(current_time)
 
         if self.data.start_date:
-            start_date = self.data.start_date
-            if isinstance(start_date, datetime):
-                start_date = start_date.date()
-            if current_date < start_date:
+            if isinstance(self.data.start_date, datetime):
+                # start_date is a timezone-aware datetime (start of day in local time)
+                if current_local < self.data.start_date:
+                    self._current_status = STATE_NOT_DUE
+                    return
+            elif current_local.date() < self.data.start_date:
+                # start_date is a date object, compare dates
                 self._current_status = STATE_NOT_DUE
                 return
 
         if self.data.end_date:
-            end_date = self.data.end_date
-            if isinstance(end_date, datetime):
-                end_date = end_date.date()
-            if current_date > end_date:
+            if isinstance(self.data.end_date, datetime):
+                # end_date is a timezone-aware datetime (end of day in local time)
+                if current_local > self.data.end_date:
+                    self._current_status = STATE_NOT_DUE
+                    return
+            elif current_local.date() > self.data.end_date:
+                # end_date is a date object, compare dates
                 self._current_status = STATE_NOT_DUE
                 return
 

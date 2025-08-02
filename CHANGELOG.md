@@ -1,3 +1,6 @@
+v1.2.2
+- Fixed timezone handling with `Start Date` and `End Date`
+
 v1.2.1
 - Added optional datetime parameter to take/skip service calls to accurately record dose time if recording happens in the future after taking a medication.
 

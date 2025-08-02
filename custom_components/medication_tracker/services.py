@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 
 import voluptuous as vol
@@ -144,13 +145,24 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             return
 
         coordinator = coordinators[0]
+
+        # Convert date objects to local timezone datetime objects
+        start_date = call.data.get(CONF_START_DATE)
+        if start_date is not None:
+            # Convert date to start of day in local timezone (00:00:00)
+            start_date = dt_util.start_of_local_day(start_date)
+
+        end_date = call.data.get(CONF_END_DATE)
+        if end_date is not None:
+            # Convert date to end of day in local timezone (23:59:59.999999)
+            end_date = dt_util.start_of_local_day(end_date) + timedelta(days=1) - timedelta(microseconds=1)
         medication_data = MedicationData(
             name=call.data[CONF_MEDICATION_NAME],
             dosage=call.data[CONF_DOSAGE],
             frequency=call.data[CONF_FREQUENCY],
             times=call.data.get(CONF_TIMES, []),
-            start_date=call.data.get(CONF_START_DATE),
-            end_date=call.data.get(CONF_END_DATE),
+            start_date=start_date,
+            end_date=end_date,
             notes=call.data.get(CONF_NOTES, ""),
         )
 
@@ -188,16 +200,25 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.error("Medication %s not found", medication_id)
             return
 
+        # Handle date conversions
+        start_date = call.data.get(CONF_START_DATE, current_medication.data.start_date)
+        if start_date is not None and not isinstance(start_date, (type(None), str)):
+            # If it's a date object (not None or string), convert to local timezone datetime
+            start_date = dt_util.start_of_local_day(start_date)
+
+        end_date = call.data.get(CONF_END_DATE, current_medication.data.end_date)
+        if end_date is not None and not isinstance(end_date, (type(None), str)):
+            # If it's a date object (not None or string), convert to end of day in local timezone
+            end_date = dt_util.start_of_local_day(end_date) + timedelta(days=1) - timedelta(microseconds=1)
+
         # Create updated medication data, keeping existing values for fields not provided
         updated_data = MedicationData(
             name=call.data.get(CONF_MEDICATION_NAME, current_medication.data.name),
             dosage=call.data.get(CONF_DOSAGE, current_medication.data.dosage),
             frequency=call.data.get(CONF_FREQUENCY, current_medication.data.frequency),
             times=call.data.get(CONF_TIMES, current_medication.data.times),
-            start_date=call.data.get(
-                CONF_START_DATE, current_medication.data.start_date
-            ),
-            end_date=call.data.get(CONF_END_DATE, current_medication.data.end_date),
+            start_date=start_date,
+            end_date=end_date,
             notes=call.data.get(CONF_NOTES, current_medication.data.notes),
         )
 
