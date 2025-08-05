@@ -155,7 +155,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         end_date = call.data.get(CONF_END_DATE)
         if end_date is not None:
             # Convert date to end of day in local timezone (23:59:59.999999)
-            end_date = dt_util.start_of_local_day(end_date) + timedelta(days=1) - timedelta(microseconds=1)
+            end_date = (
+                dt_util.start_of_local_day(end_date)
+                + timedelta(days=1)
+                - timedelta(microseconds=1)
+            )
         medication_data = MedicationData(
             name=call.data[CONF_MEDICATION_NAME],
             dosage=call.data[CONF_DOSAGE],
@@ -209,7 +213,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         end_date = call.data.get(CONF_END_DATE, current_medication.data.end_date)
         if end_date is not None and not isinstance(end_date, (type(None), str)):
             # If it's a date object (not None or string), convert to end of day in local timezone
-            end_date = dt_util.start_of_local_day(end_date) + timedelta(days=1) - timedelta(microseconds=1)
+            end_date = (
+                dt_util.start_of_local_day(end_date)
+                + timedelta(days=1)
+                - timedelta(microseconds=1)
+            )
 
         # Create updated medication data, keeping existing values for fields not provided
         updated_data = MedicationData(

@@ -48,13 +48,108 @@ class MedicationTrackerPanel extends LitElement {
       notes: "",
     };
     this._editMedicationId = "";
-    this._refreshInterval = null;
     this._hassUpdateTimeout = null;
+    this._unsubscribeEvents = null;
+    this._subscribedEntities = new Set();
+    this._refreshInterval = null; // For fallback polling
   }
 
   connectedCallback() {
     super.connectedCallback();
-    // Set up periodic refresh every 30 seconds
+    // Load medications initially and set up event subscriptions
+    this._setupEventSubscriptions();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    // Clean up event subscriptions
+    this._cleanupEventSubscriptions();
+    // Clean up the hass update timeout
+    if (this._hassUpdateTimeout) {
+      clearTimeout(this._hassUpdateTimeout);
+      this._hassUpdateTimeout = null;
+    }
+  }
+
+  willUpdate(changedProps) {
+    super.willUpdate(changedProps);
+
+    // If hass has changed, refresh event subscriptions
+    if (changedProps.has("hass") && this.hass) {
+      this._setupEventSubscriptions();
+    }
+  }
+
+  async _setupEventSubscriptions() {
+    if (!this.hass) {
+      return;
+    }
+
+    // Load medications first
+    await this._loadMedications();
+
+    // Clean up existing subscriptions
+    this._cleanupEventSubscriptions();
+
+    // Get all medication tracker entities
+    const medicationEntities = Object.keys(this.hass.states).filter((entityId) => {
+      const state = this.hass.states[entityId];
+      // Check for medication tracker entities by looking at attributes
+      return (
+        (entityId.startsWith("sensor.") &&
+          (entityId.includes("_status") || entityId.includes("_adherence") || entityId.includes("_id")) &&
+          state.attributes && state.attributes.medication_name) ||
+        (entityId.startsWith("binary_sensor.") &&
+          entityId.includes("_due") &&
+          state.attributes && state.attributes.medication_name)
+      );
+    });
+
+    if (medicationEntities.length === 0) {
+      console.log("No medication tracker entities found for event subscription");
+      return;
+    }
+
+    console.log("Setting up event subscriptions for entities:", medicationEntities);
+
+    try {
+      // Subscribe to state changes for medication tracker entities
+      this._unsubscribeEvents = await this.hass.connection.subscribeEvents(
+        (event) => this._handleStateChanged(event),
+        "state_changed"
+      );
+
+      // Track subscribed entities
+      this._subscribedEntities = new Set(medicationEntities);
+
+      console.log("Successfully subscribed to medication tracker entity events");
+    } catch (error) {
+      console.error("Failed to subscribe to events:", error);
+      // Fallback to periodic refresh if WebSocket subscription fails
+      this._setupFallbackPolling();
+    }
+  }
+
+  _cleanupEventSubscriptions() {
+    if (this._unsubscribeEvents) {
+      this._unsubscribeEvents();
+      this._unsubscribeEvents = null;
+    }
+    this._subscribedEntities.clear();
+
+    // Clean up fallback polling if it exists
+    if (this._refreshInterval) {
+      clearInterval(this._refreshInterval);
+      this._refreshInterval = null;
+    }
+  }
+
+  _setupFallbackPolling() {
+    // Fallback polling every 30 seconds if event subscription fails
+    console.log("Setting up fallback polling for medication updates");
+    if (this._refreshInterval) {
+      clearInterval(this._refreshInterval);
+    }
     this._refreshInterval = setInterval(() => {
       if (this.hass && !this._loading) {
         this._loadMedications();
@@ -62,18 +157,53 @@ class MedicationTrackerPanel extends LitElement {
     }, 30000);
   }
 
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    // Clean up the refresh interval
-    if (this._refreshInterval) {
-      clearInterval(this._refreshInterval);
-      this._refreshInterval = null;
+  _handleStateChanged(event) {
+    const { entity_id, new_state, old_state } = event.data;
+
+    // Only process events for medication tracker entities
+    if (!this._subscribedEntities.has(entity_id)) {
+      return;
     }
-    // Clean up the hass update timeout
-    if (this._hassUpdateTimeout) {
-      clearTimeout(this._hassUpdateTimeout);
-      this._hassUpdateTimeout = null;
+
+    // Only reload if the state or relevant attributes actually changed
+    if (this._hasRelevantStateChange(old_state, new_state)) {
+      console.log(`Medication entity ${entity_id} changed, refreshing panel data`);
+
+      // Debounce rapid state changes
+      if (this._hassUpdateTimeout) {
+        clearTimeout(this._hassUpdateTimeout);
+      }
+
+      this._hassUpdateTimeout = setTimeout(() => {
+        this._loadMedications();
+      }, 250); // Small delay to batch multiple rapid changes
     }
+  }
+
+  _hasRelevantStateChange(oldState, newState) {
+    if (!oldState || !newState) {
+      return true;
+    }
+
+    // Check if state value changed
+    if (oldState.state !== newState.state) {
+      return true;
+    }
+
+    // Check if relevant attributes changed
+    const relevantAttributes = [
+      'medication_name', 'dosage', 'frequency', 'times',
+      'last_taken', 'next_due', 'missed_doses', 'adherence_rate',
+      'start_date', 'end_date', 'notes'
+    ];
+
+    for (const attr of relevantAttributes) {
+      if (oldState.attributes[attr] !== newState.attributes[attr]) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   static get styles() {
@@ -427,18 +557,15 @@ class MedicationTrackerPanel extends LitElement {
   }
 
   firstUpdated() {
-    this._loadMedications();
+    // Initial load is handled by _setupEventSubscriptions in connectedCallback
   }
 
   willUpdate(changedProps) {
     super.willUpdate(changedProps);
-    // Refresh medications when hass object changes (entity states updated)
-    if (changedProps.has('hass') && this.hass && !this._loading) {
-      // Debounce to avoid too frequent updates
-      clearTimeout(this._hassUpdateTimeout);
-      this._hassUpdateTimeout = setTimeout(() => {
-        this._loadMedications();
-      }, 500);
+
+    // If hass has changed, refresh event subscriptions
+    if (changedProps.has("hass") && this.hass) {
+      this._setupEventSubscriptions();
     }
   }
 
@@ -555,8 +682,7 @@ class MedicationTrackerPanel extends LitElement {
       await this.hass.callService("medication_tracker", "take_medication", {
         medication_id: medicationId,
       });
-      // Add a small delay to ensure the backend has processed the change
-      setTimeout(() => this._loadMedications(), 500);
+      // Event subscription will automatically update the UI
     } catch (error) {
       console.error("Error taking medication:", error);
     }
@@ -568,8 +694,7 @@ class MedicationTrackerPanel extends LitElement {
       await this.hass.callService("medication_tracker", "skip_medication", {
         medication_id: medicationId,
       });
-      // Add a small delay to ensure the backend has processed the change
-      setTimeout(() => this._loadMedications(), 500);
+      // Event subscription will automatically update the UI
     } catch (error) {
       console.error("Error skipping medication:", error);
     }
@@ -585,8 +710,7 @@ class MedicationTrackerPanel extends LitElement {
       await this.hass.callService("medication_tracker", "remove_medication", {
         medication_id: medicationId,
       });
-      // Add a small delay to ensure the backend has processed the change
-      setTimeout(() => this._loadMedications(), 500);
+      // Event subscription will automatically update the UI
     } catch (error) {
       console.error("Error removing medication:", error);
     }
@@ -656,8 +780,7 @@ class MedicationTrackerPanel extends LitElement {
 
       await this.hass.callService("medication_tracker", "add_medication", data);
       this._hideAddMedicationDialog();
-      // Add a small delay to ensure the backend has processed the change
-      setTimeout(() => this._loadMedications(), 500);
+      // Event subscription will automatically update the UI
     } catch (error) {
       console.error("Error adding medication:", error);
     }
@@ -745,8 +868,7 @@ class MedicationTrackerPanel extends LitElement {
 
       await this.hass.callService("medication_tracker", "update_medication", data);
       this._hideEditMedicationDialog();
-      // Add a small delay to ensure the backend has processed the change
-      setTimeout(() => this._loadMedications(), 500);
+      // Event subscription will automatically update the UI
     } catch (error) {
       console.error("Error updating medication:", error);
     }

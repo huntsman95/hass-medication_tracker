@@ -222,15 +222,16 @@ class MedicationEntry:
                 self._current_status = STATE_OVERDUE
             else:
                 self._current_status = STATE_DUE
-        elif last_taken and current_time - last_taken < self._get_dose_interval():
-            # Check if dose was recently taken
-            self._current_status = STATE_TAKEN
         else:
-            # Check for recently skipped doses
+            # Check for recently skipped doses first (priority over taken status)
             recently_skipped = self._check_recently_skipped(current_time)
             if recently_skipped:
                 self._current_status = STATE_SKIPPED
                 return
+
+            if last_taken and current_time - last_taken < self._get_dose_interval():
+                # Check if dose was recently taken
+                self._current_status = STATE_TAKEN
 
             # Check if any of today's scheduled times are overdue
             current_local = dt_util.as_local(current_time)
@@ -358,38 +359,22 @@ class MedicationEntry:
         current_local = dt_util.as_local(current_time)
         today = current_local.date()
 
-        # Check if there are any skipped doses today
+        # Get the most recent dose record for today
+        most_recent_today = None
         for record in reversed(self.dose_history):
             record_local = dt_util.as_local(record.timestamp)
             record_date = record_local.date()
 
-            # Only look at today's records
             if record_date == today:
-                if not record.taken:  # This was skipped
-                    # Check if this skip was for a scheduled time that was due
-                    for time_str in self.data.times:
-                        hour, minute = map(int, time_str.split(":"))
-                        scheduled_time = datetime.combine(
-                            today, datetime.min.time().replace(hour=hour, minute=minute)
-                        )
-                        scheduled_time_aware = dt_util.as_local(scheduled_time)
-
-                        # If the skip happened after the scheduled time and within a reasonable window
-                        # Consider it skipped until the next dose or end of day
-                        if (
-                            record.timestamp >= scheduled_time_aware
-                            and record.timestamp
-                            <= scheduled_time_aware + timedelta(hours=8)
-                        ):
-                            # Check if we haven't moved to the next scheduled time yet
-                            next_scheduled = self._get_next_scheduled_time_today(
-                                current_time, time_str
-                            )
-                            if next_scheduled is None or current_time < next_scheduled:
-                                return True
-            elif record_date < today:
-                # Don't look at older records
+                most_recent_today = record
                 break
+            if record_date < today:
+                # Stop looking at older records
+                break
+
+        # If the most recent dose record for today was skipped, return True
+        if most_recent_today is not None and not most_recent_today.taken:
+            return True
 
         return False
 

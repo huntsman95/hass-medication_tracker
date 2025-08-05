@@ -1,3 +1,7 @@
+v1.2.3
+- Fixed "skipped" state not properly taking effect immediately
+- Fixed UI panel delays. Now responds to HASS Websocket updates instead of polling.
+
 v1.2.2
 - Fixed timezone handling with `Start Date` and `End Date`
 
