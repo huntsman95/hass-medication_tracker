@@ -232,6 +232,7 @@ class MedicationEntry:
             if last_taken and current_time - last_taken < self._get_dose_interval():
                 # Check if dose was recently taken
                 self._current_status = STATE_TAKEN
+                return
 
             # Check if any of today's scheduled times are overdue
             current_local = dt_util.as_local(current_time)

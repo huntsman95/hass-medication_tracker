@@ -1,3 +1,6 @@
+v1.2.4
+- Fixed bug introduced with v1.2.3 which marked all taken medication as overdue.
+
 v1.2.3
 - Fixed "skipped" state not properly taking effect immediately
 - Fixed UI panel delays. Now responds to HASS Websocket updates instead of polling.
