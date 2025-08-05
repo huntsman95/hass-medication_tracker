@@ -799,8 +799,8 @@ class MedicationTrackerPanel extends LitElement {
       dosage: medication.dosage,
       frequency: medication.frequency,
       times: [...medication.times],
-      start_date: medication.start_date || "",
-      end_date: medication.end_date || "",
+      start_date: this._formatDateForInput(medication.start_date),
+      end_date: this._formatDateForInput(medication.end_date),
       notes: medication.notes || "",
     };
     this._showEditDialog = true;
@@ -886,6 +886,40 @@ class MedicationTrackerPanel extends LitElement {
   _formatTime(timeString) {
     if (!timeString) return "—";
     return new Date(timeString).toLocaleString();
+  }
+
+  _formatDateForInput(dateValue) {
+    if (!dateValue) return "";
+    
+    // Handle different date formats that might come from the backend
+    let date;
+    if (typeof dateValue === 'string') {
+      // If it's already a string, try to parse it
+      if (dateValue.includes('T')) {
+        // It's a datetime string, extract just the date part
+        date = new Date(dateValue);
+      } else if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        // It's already in YYYY-MM-DD format
+        return dateValue;
+      } else {
+        // Try to parse as date
+        date = new Date(dateValue);
+      }
+    } else if (dateValue instanceof Date) {
+      date = dateValue;
+    } else {
+      // Unknown format, return empty
+      return "";
+    }
+    
+    // Convert to YYYY-MM-DD format for HTML date input
+    if (date && !isNaN(date.getTime())) {
+      return date.getFullYear() + '-' + 
+             String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+             String(date.getDate()).padStart(2, '0');
+    }
+    
+    return "";
   }
 
   render() {

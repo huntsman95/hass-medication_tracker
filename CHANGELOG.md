@@ -1,3 +1,7 @@
+v1.2.5
+- BUGFIX: Weekly/Monthly Next Due Calculation: Updated the _calculate_weekly_next_due and _calculate_monthly_next_due methods in models.py to use the dynamic self.last_taken property instead of the cached self._last_taken value, ensuring correct calculations after Home Assistant reloads.
+- BUGFIX: Panel Date Field Population: Added the _formatDateForInput helper method in the JavaScript panel to properly convert date/datetime values from the backend into the YYYY-MM-DD format expected by HTML date input fields.
+
 v1.2.4
 - Fixed bug introduced with v1.2.3 which marked all taken medication as overdue.
 
