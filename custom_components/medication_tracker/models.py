@@ -309,20 +309,35 @@ class MedicationEntry:
 
     def _calculate_weekly_next_due(self, current_time: datetime) -> None:
         """Calculate next due time for weekly medication."""
-        # For simplicity, assume weekly medications are taken once per week
-        if self._last_taken:
-            self._next_due = self._last_taken + timedelta(weeks=1)
+        # Use the dynamic property instead of cached _last_taken
+        last_taken = self.last_taken  # This calculates from dose_history
+        if last_taken:
+            self._next_due = last_taken + timedelta(weeks=1)
         else:
             # First dose - use current time
             self._next_due = current_time
 
     def _calculate_monthly_next_due(self, current_time: datetime) -> None:
         """Calculate next due time for monthly medication."""
-        # For simplicity, assume monthly medications are taken once per month
-        if self._last_taken:
+        # Use the dynamic property instead of cached _last_taken
+        last_taken = self.last_taken  # This calculates from dose_history
+        if last_taken:
             # Try to maintain the same day of month
-            next_month = self._last_taken.replace(month=self._last_taken.month + 1)
-            self._next_due = next_month
+            try:
+                if last_taken.month == 12:
+                    next_month = last_taken.replace(year=last_taken.year + 1, month=1)
+                else:
+                    next_month = last_taken.replace(month=last_taken.month + 1)
+                self._next_due = next_month
+            except ValueError:
+                # Handle day-of-month edge cases (e.g., Jan 31 -> Feb 28/29)
+                if last_taken.month == 12:
+                    next_month = last_taken.replace(
+                        year=last_taken.year + 1, month=1, day=1
+                    )
+                else:
+                    next_month = last_taken.replace(month=last_taken.month + 1, day=1)
+                self._next_due = next_month
         else:
             # First dose - use current time
             self._next_due = current_time
