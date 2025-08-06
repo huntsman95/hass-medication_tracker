@@ -1,3 +1,6 @@
+v1.4.1
+- BUGFIX: Fixed bug introduced in v1.3.1 where dose taken in overdue state was not triggering status sensor to change to "taken" status
+
 v1.4.0
 - FEATURE: Added dose history calendar to track taken and skipped doses (does not record "missed" doses)
 

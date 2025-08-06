@@ -384,13 +384,15 @@ class MedicationEntry:
         if not self.dose_history:
             return False
 
-        # Look for doses taken within 2 hours before or after the scheduled time
-        time_window_start = scheduled_time - timedelta(hours=2)
-        time_window_end = scheduled_time + timedelta(hours=2)
+        # For daily medications, check if any dose was taken on the same day
+        # as the scheduled time (between 00:00 and 23:59 local time)
+        scheduled_date = dt_util.as_local(scheduled_time).date()
 
         for dose in self.dose_history:
-            if dose.taken and time_window_start <= dose.timestamp <= time_window_end:
-                return True
+            if dose.taken:
+                dose_date = dt_util.as_local(dose.timestamp).date()
+                if dose_date == scheduled_date:
+                    return True
 
         return False
 
