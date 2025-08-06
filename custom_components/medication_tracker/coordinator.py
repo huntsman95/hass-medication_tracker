@@ -135,6 +135,11 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         medication = self._medications[medication_id]
         medication.data = medication_data
 
+        # Force recalculation of next due time since schedule may have changed
+        medication.reset_schedule()
+        now = dt_util.now()
+        medication.update_status(now)
+
         # Save the changes
         await self.async_save_medications()
         await self.async_request_refresh()

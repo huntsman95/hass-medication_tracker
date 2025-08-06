@@ -168,6 +168,10 @@ class MedicationEntry:
         self.dose_history.append(record)
         self._update_next_due(timestamp)
 
+    def reset_schedule(self) -> None:
+        """Reset schedule calculations to force recalculation."""
+        self._next_due = None
+
     def update_status(self, current_time: datetime) -> None:
         """Update the current status of the medication."""
         # Check if medication is outside its active date range
