@@ -114,7 +114,9 @@ class DoseRecord:
 class MedicationEntry:
     """Medication entry with tracking data."""
 
-    def __init__(self, id: str, data: MedicationData, event_callback: Callable | None = None) -> None:
+    def __init__(
+        self, id: str, data: MedicationData, event_callback: Callable | None = None
+    ) -> None:
         """Initialize medication entry."""
         self.id = id
         self.data = data
@@ -138,7 +140,9 @@ class MedicationEntry:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any], event_callback: Callable | None = None) -> MedicationEntry:
+    def from_dict(
+        cls, data: dict[str, Any], event_callback: Callable | None = None
+    ) -> MedicationEntry:
         """Create from dictionary."""
         entry = cls(
             id=data["id"],
@@ -320,6 +324,7 @@ class MedicationEntry:
         today = current_local.date()
         next_due = None
 
+        # First, check if there are any remaining times today that are still future
         for time_str in self.data.times:
             hour, minute = map(int, time_str.split(":"))
 
@@ -335,19 +340,59 @@ class MedicationEntry:
                 if next_due is None or due_time < next_due:
                     next_due = due_time
 
+        # If no future times today, check if any of today's times are still pending
         if next_due is None:
-            # All times for today have passed, get tomorrow's first time
-            tomorrow = today + timedelta(days=1)
-            hour, minute = map(int, self.data.times[0].split(":"))
+            # Check if any of today's scheduled times haven't been taken yet
+            any_today_untaken = False
+            earliest_today_time = None
 
-            naive_next_due = datetime.combine(
-                tomorrow, datetime.min.time().replace(hour=hour, minute=minute)
-            )
+            for time_str in self.data.times:
+                hour, minute = map(int, time_str.split(":"))
+                naive_due_time = datetime.combine(
+                    today, datetime.min.time().replace(hour=hour, minute=minute)
+                )
+                due_time = dt_util.as_local(naive_due_time)
 
-            # Use dt_util.as_local to interpret this as a local time
-            next_due = dt_util.as_local(naive_next_due)
+                # Track the earliest time today for reference
+                if earliest_today_time is None or due_time < earliest_today_time:
+                    earliest_today_time = due_time
+
+                # Check if this specific time was taken
+                if not self._was_dose_taken_for_time(due_time):
+                    any_today_untaken = True
+                    # Keep the earliest untaken time as next_due so it shows as overdue
+                    if next_due is None or due_time < next_due:
+                        next_due = due_time
+
+            # Only move to tomorrow if all of today's doses were actually taken
+            if not any_today_untaken:
+                # All times for today have been taken, get tomorrow's first time
+                tomorrow = today + timedelta(days=1)
+                hour, minute = map(int, self.data.times[0].split(":"))
+
+                naive_next_due = datetime.combine(
+                    tomorrow, datetime.min.time().replace(hour=hour, minute=minute)
+                )
+
+                # Use dt_util.as_local to interpret this as a local time
+                next_due = dt_util.as_local(naive_next_due)
 
         self._next_due = next_due
+
+    def _was_dose_taken_for_time(self, scheduled_time: datetime) -> bool:
+        """Check if a dose was taken for a specific scheduled time."""
+        if not self.dose_history:
+            return False
+
+        # Look for doses taken within 2 hours before or after the scheduled time
+        time_window_start = scheduled_time - timedelta(hours=2)
+        time_window_end = scheduled_time + timedelta(hours=2)
+
+        for dose in self.dose_history:
+            if dose.taken and time_window_start <= dose.timestamp <= time_window_end:
+                return True
+
+        return False
 
     def _calculate_weekly_next_due(self, current_time: datetime) -> None:
         """Calculate next due time for weekly medication."""

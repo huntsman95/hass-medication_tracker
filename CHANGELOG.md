@@ -1,3 +1,6 @@
+v1.3.1
+- BUGFIX: Fixed incorrect next_due calculation for missed medications (due/overdue) when reloading integration or modifying medication
+
 v1.3.0
 - FEATURE: Now emits events. See EVENTS.md
 - BUGFIX: Resolved medications showing as "Taken" even though they aren't yet due for the day.
