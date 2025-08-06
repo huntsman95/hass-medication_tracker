@@ -223,35 +223,31 @@ class MedicationEntry:
             else:
                 self._current_status = STATE_DUE
         else:
+            # Not yet due based on next_due time, but check other conditions
+
             # Check for recently skipped doses first (priority over taken status)
             recently_skipped = self._check_recently_skipped(current_time)
             if recently_skipped:
                 self._current_status = STATE_SKIPPED
                 return
 
-            if last_taken and current_time - last_taken < self._get_dose_interval():
-                # Check if dose was recently taken
+            # For daily medications, check if recently taken within dose interval
+            if (
+                last_taken
+                and self.data.frequency == FREQUENCY_DAILY
+                and current_time - last_taken < self._get_dose_interval()
+            ):
                 self._current_status = STATE_TAKEN
                 return
 
-            # Check if any of today's scheduled times are overdue
-            current_local = dt_util.as_local(current_time)
-            today = current_local.date()
-
-            for time_str in self.data.times:
-                hour, minute = map(int, time_str.split(":"))
-                naive_due_time = datetime.combine(
-                    today, datetime.min.time().replace(hour=hour, minute=minute)
-                )
-                due_time = dt_util.as_local(naive_due_time)
-
-                # If current time is past this scheduled time today, medication is due/overdue
-                if current_time >= due_time:
-                    if current_time > due_time + timedelta(hours=2):
-                        self._current_status = STATE_OVERDUE
-                    else:
-                        self._current_status = STATE_DUE
-                    return
+            # For non-daily medications, check if recently taken
+            if (
+                last_taken
+                and self.data.frequency != FREQUENCY_DAILY
+                and current_time - last_taken < self._get_dose_interval()
+            ):
+                self._current_status = STATE_TAKEN
+                return
 
             self._current_status = STATE_NOT_DUE
 
