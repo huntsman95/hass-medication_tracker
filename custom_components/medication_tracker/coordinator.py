@@ -89,7 +89,9 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Add a new medication."""
         # Auto-populate start_date with today if not specified
         if medication_data.start_date is None:
-            medication_data.start_date = dt_util.start_of_local_day().date()
+            # Use the same pattern as services.py - create timezone-aware datetime for start of today
+            today = dt_util.now().date()
+            medication_data.start_date = dt_util.start_of_local_day(today)
 
         medication = MedicationEntry(
             id=str(uuid.uuid4()),
