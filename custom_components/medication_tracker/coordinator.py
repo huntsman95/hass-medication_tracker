@@ -10,8 +10,7 @@ import uuid
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import async_get as async_get_device_registry
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -40,7 +39,7 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self._medications: dict[str, MedicationEntry] = {}
-        self._entity_creation_callbacks: dict[str, Callable] = {}
+        self._entity_creation_callbacks: dict[str, Callable[..., Any]] = {}
         self._config_entry_id: str = config_entry.entry_id
 
     async def async_load_medications(self) -> None:
@@ -80,11 +79,11 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except (OSError, ValueError) as err:
             _LOGGER.error("Error updating medication data: %s", err)
             raise UpdateFailed(f"Error updating medication data: {err}") from err
-        else:
-            return {
-                "medications": self._medications,
-                "last_updated": now,
-            }
+
+        return {
+            "medications": self._medications,
+            "last_updated": now,
+        }
 
     async def async_add_medication(self, medication_data: MedicationData) -> str:
         """Add a new medication."""
@@ -138,7 +137,7 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return True
 
     def register_entity_creation_callback(
-        self, platform: str, callback: Callable
+        self, platform: str, callback: Callable[..., Any]
     ) -> None:
         """Register a callback for creating entities when medications are added."""
         self._entity_creation_callbacks[platform] = callback
@@ -177,7 +176,7 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             entry.entity_id
             for entry in entity_registry.entities.values()
             if (
-                entry.domain in ["sensor", "binary_sensor", "button"]
+                entry.domain in {"sensor", "binary_sensor", "button"}
                 and entry.platform == DOMAIN
                 and medication_id in entry.unique_id
             )
@@ -222,7 +221,7 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self, medication: MedicationEntry
     ) -> None:
         """Create a device for a medication."""
-        device_registry = async_get_device_registry(self.hass)
+        device_registry = dr.async_get(self.hass)
 
         device_registry.async_get_or_create(
             config_entry_id=self._config_entry_id,
@@ -235,7 +234,7 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_remove_device_for_medication(self, medication_id: str) -> None:
         """Remove a device for a medication."""
-        device_registry = async_get_device_registry(self.hass)
+        device_registry = dr.async_get(self.hass)
         medication = self._medications.get(medication_id)
 
         if medication:
