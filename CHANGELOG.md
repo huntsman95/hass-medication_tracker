@@ -1,6 +1,21 @@
 v1.2.5
 - BUGFIX: Weekly/Monthly Next Due Calculation: Updated the _calculate_weekly_next_due and _calculate_monthly_next_due methods in models.py to use the dynamic self.last_taken property instead of the cached self._last_taken value, ensuring correct calculations after Home Assistant reloads.
 - BUGFIX: Panel Date Field Population: Added the _formatDateForInput helper method in the JavaScript panel to properly convert date/datetime values from the backend into the YYYY-MM-DD format expected by HTML date input fields.
+- Coordinator.py Lint Fixes
+  - Import compliance: Changed device registry import from direct function import to namespace import
+    - from homeassistant.helpers.device_registry import async_get as async_get_device_registry → from homeassistant.helpers import device_registry as dr
+    - Updated function calls from async_get_device_registry(self.hass) to dr.async_get(self.hass)
+    - Resolves Pylint W7425 (hass-helper-namespace-import)
+  - Type annotations: Added proper type specifications to Callable types
+  - Callable → Callable[..., Any] for _entity_creation_callbacks and register_entity_creation_callback
+  - Code structure: Removed unnecessary else clause after raise statement in _async_update_data
+
+  - Eliminates unreachable code after exception handling
+  - Performance optimization: Changed list to set for membership testing
+    - ["sensor", "binary_sensor", "button"] → {"sensor", "binary_sensor", "button"}
+    - Improves lookup performance from O(n) to O(1)
+  - Code formatting: Removed trailing whitespace from blank lines
+    - Complies with PEP 8 formatting standards
 
 v1.2.4
 - Fixed bug introduced with v1.2.3 which marked all taken medication as overdue.

@@ -87,6 +87,10 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_add_medication(self, medication_data: MedicationData) -> str:
         """Add a new medication."""
+        # Auto-populate start_date with today if not specified
+        if medication_data.start_date is None:
+            medication_data.start_date = dt_util.start_of_local_day().date()
+
         medication = MedicationEntry(
             id=str(uuid.uuid4()),
             data=medication_data,
