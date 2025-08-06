@@ -42,13 +42,18 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._entity_creation_callbacks: dict[str, Callable[..., Any]] = {}
         self._config_entry_id: str = config_entry.entry_id
 
+    def _fire_event(self, event_type: str, event_data: dict[str, Any]) -> None:
+        """Fire a Home Assistant event."""
+        self.hass.bus.async_fire(event_type, event_data)
+
     async def async_load_medications(self) -> None:
         """Load medications from storage."""
         try:
             data = await self._store.async_load()
             if data is not None:
                 for med_id, med_data in data.get("medications", {}).items():
-                    self._medications[med_id] = MedicationEntry.from_dict(med_data)
+                    medication = MedicationEntry.from_dict(med_data, self._fire_event)
+                    self._medications[med_id] = medication
         except (OSError, ValueError) as err:
             _LOGGER.error("Error loading medications: %s", err)
 
@@ -96,6 +101,7 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         medication = MedicationEntry(
             id=str(uuid.uuid4()),
             data=medication_data,
+            event_callback=self._fire_event,
         )
         self._medications[medication.id] = medication
         await self.async_save_medications()

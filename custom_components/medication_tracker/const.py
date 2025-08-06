@@ -50,3 +50,6 @@ STATE_TAKEN: Final = "taken"
 STATE_OVERDUE: Final = "overdue"
 STATE_NOT_DUE: Final = "not_due"
 STATE_SKIPPED: Final = "skipped"
+
+# Events
+EVENT_MEDICATION_STATE_CHANGED: Final = "medication_tracker_state_changed"

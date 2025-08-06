@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    EVENT_MEDICATION_STATE_CHANGED,
     FREQUENCY_AS_NEEDED,
     FREQUENCY_DAILY,
     FREQUENCY_MONTHLY,
@@ -112,7 +114,7 @@ class DoseRecord:
 class MedicationEntry:
     """Medication entry with tracking data."""
 
-    def __init__(self, id: str, data: MedicationData) -> None:
+    def __init__(self, id: str, data: MedicationData, event_callback: Callable | None = None) -> None:
         """Initialize medication entry."""
         self.id = id
         self.data = data
@@ -122,6 +124,8 @@ class MedicationEntry:
         self._last_taken: datetime | None = None
         # Device identifier for Home Assistant device registry
         self.device_id = f"medication_{id}"
+        # Callback to fire events when state changes
+        self._event_callback = event_callback
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -134,11 +138,12 @@ class MedicationEntry:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> MedicationEntry:
+    def from_dict(cls, data: dict[str, Any], event_callback: Callable | None = None) -> MedicationEntry:
         """Create from dictionary."""
         entry = cls(
             id=data["id"],
             data=MedicationData.from_dict(data["data"]),
+            event_callback=event_callback,
         )
         # Handle legacy data that might not have device_id
         if "device_id" in data:
@@ -161,19 +166,45 @@ class MedicationEntry:
         self.dose_history.append(record)
         # Don't cache _last_taken - calculate it dynamically from dose_history
         self._update_next_due(timestamp)
+        # Update status after recording dose
+        self.update_status(timestamp)
 
     def record_dose_skipped(self, timestamp: datetime, notes: str = "") -> None:
         """Record that a dose was skipped."""
         record = DoseRecord(timestamp=timestamp, taken=False, notes=notes)
         self.dose_history.append(record)
         self._update_next_due(timestamp)
+        # Update status after recording dose
+        self.update_status(timestamp)
 
     def reset_schedule(self) -> None:
         """Reset schedule calculations to force recalculation."""
         self._next_due = None
 
+    def _fire_state_change_event(self, old_status: str, new_status: str) -> None:
+        """Fire an event when medication state changes."""
+        if self._event_callback and old_status != new_status:
+            event_data = {
+                "medication_id": self.id,
+                "device_id": self.device_id,
+                "name": self.data.name,
+                "dosage": self.data.dosage,
+                "frequency": self.data.frequency,
+                "notes": self.data.notes,
+                "old_status": old_status,
+                "new_status": new_status,
+                "next_due": self._next_due.isoformat() if self._next_due else None,
+                "last_taken": self.last_taken.isoformat() if self.last_taken else None,
+                "missed_doses": self.missed_doses,
+                "adherence_rate": self.adherence_rate,
+            }
+            self._event_callback(EVENT_MEDICATION_STATE_CHANGED, event_data)
+
     def update_status(self, current_time: datetime) -> None:
         """Update the current status of the medication."""
+        # Store the old status to detect changes
+        old_status = self._current_status
+
         # Check if medication is outside its active date range
         current_local = dt_util.as_local(current_time)
 
@@ -182,10 +213,12 @@ class MedicationEntry:
                 # start_date is a timezone-aware datetime (start of day in local time)
                 if current_local < self.data.start_date:
                     self._current_status = STATE_NOT_DUE
+                    self._fire_state_change_event(old_status, self._current_status)
                     return
             elif current_local.date() < self.data.start_date:
                 # start_date is a date object, compare dates
                 self._current_status = STATE_NOT_DUE
+                self._fire_state_change_event(old_status, self._current_status)
                 return
 
         if self.data.end_date:
@@ -193,14 +226,17 @@ class MedicationEntry:
                 # end_date is a timezone-aware datetime (end of day in local time)
                 if current_local > self.data.end_date:
                     self._current_status = STATE_NOT_DUE
+                    self._fire_state_change_event(old_status, self._current_status)
                     return
             elif current_local.date() > self.data.end_date:
                 # end_date is a date object, compare dates
                 self._current_status = STATE_NOT_DUE
+                self._fire_state_change_event(old_status, self._current_status)
                 return
 
         if self.data.frequency == FREQUENCY_AS_NEEDED:
             self._current_status = STATE_NOT_DUE
+            self._fire_state_change_event(old_status, self._current_status)
             return
 
         if self._next_due is None:
@@ -233,6 +269,7 @@ class MedicationEntry:
             recently_skipped = self._check_recently_skipped(current_time)
             if recently_skipped:
                 self._current_status = STATE_SKIPPED
+                self._fire_state_change_event(old_status, self._current_status)
                 return
 
             # For daily medications, check if recently taken within dose interval
@@ -242,6 +279,7 @@ class MedicationEntry:
                 and current_time - last_taken < self._get_dose_interval()
             ):
                 self._current_status = STATE_TAKEN
+                self._fire_state_change_event(old_status, self._current_status)
                 return
 
             # For non-daily medications, check if recently taken
@@ -251,9 +289,13 @@ class MedicationEntry:
                 and current_time - last_taken < self._get_dose_interval()
             ):
                 self._current_status = STATE_TAKEN
+                self._fire_state_change_event(old_status, self._current_status)
                 return
 
             self._current_status = STATE_NOT_DUE
+
+        # Fire event for any status change
+        self._fire_state_change_event(old_status, self._current_status)
 
     def _calculate_next_due(self, current_time: datetime) -> None:
         """Calculate the next due time."""
