@@ -47,7 +47,7 @@ async def async_register_panel(hass: HomeAssistant) -> None:
         webcomponent_name="medication-tracker-panel",
         sidebar_title=PANEL_TITLE,
         sidebar_icon=PANEL_ICON,
-        module_url=f"{PANEL_URL}/static/medication-tracker-panel.js",
+        module_url=f"{PANEL_URL}/static/medication-tracker-panel.js?v=1.4.0",
         embed_iframe=False,
         trust_external=False,
         require_admin=False,

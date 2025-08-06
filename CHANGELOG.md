@@ -1,3 +1,6 @@
+v1.4.0
+- FEATURE: Added dose history calendar to track taken and skipped doses (does not record "missed" doses)
+
 v1.3.1
 - BUGFIX: Fixed incorrect next_due calculation for missed medications (due/overdue) when reloading integration or modifying medication
 
