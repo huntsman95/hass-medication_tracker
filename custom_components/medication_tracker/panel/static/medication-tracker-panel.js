@@ -890,7 +890,7 @@ class MedicationTrackerPanel extends LitElement {
 
   _formatDateForInput(dateValue) {
     if (!dateValue) return "";
-    
+
     // Handle different date formats that might come from the backend
     let date;
     if (typeof dateValue === 'string') {
@@ -911,14 +911,14 @@ class MedicationTrackerPanel extends LitElement {
       // Unknown format, return empty
       return "";
     }
-    
+
     // Convert to YYYY-MM-DD format for HTML date input
     if (date && !isNaN(date.getTime())) {
-      return date.getFullYear() + '-' + 
-             String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+      return date.getFullYear() + '-' +
+             String(date.getMonth() + 1).padStart(2, '0') + '-' +
              String(date.getDate()).padStart(2, '0');
     }
-    
+
     return "";
   }
 

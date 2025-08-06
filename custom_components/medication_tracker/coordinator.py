@@ -11,9 +11,7 @@ import uuid
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import (
-    async_get as async_get_device_registry,
-)
+from homeassistant.helpers.device_registry import async_get as async_get_device_registry
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -201,7 +199,7 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         medication.record_dose_taken(taken_at)
         await self.async_save_medications()
-        await self.async_request_refresh()
+        await self.async_refresh()
         return True
 
     async def async_skip_medication(
@@ -217,7 +215,7 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         medication.record_dose_skipped(skipped_at)
         await self.async_save_medications()
-        await self.async_request_refresh()
+        await self.async_refresh()
         return True
 
     async def _async_create_device_for_medication(
