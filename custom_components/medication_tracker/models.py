@@ -55,7 +55,7 @@ class MedicationData:
         if data.get("start_date"):
             start_date_str = data["start_date"]
             if "T" in start_date_str:
-                start_date = datetime.fromisoformat(start_date_str)
+                start_date = dt_util.as_local(datetime.fromisoformat(start_date_str))
             else:
                 start_date = datetime.fromisoformat(start_date_str).date()
 
@@ -64,7 +64,7 @@ class MedicationData:
         if data.get("end_date"):
             end_date_str = data["end_date"]
             if "T" in end_date_str:
-                end_date = datetime.fromisoformat(end_date_str)
+                end_date = dt_util.as_local(datetime.fromisoformat(end_date_str))
             else:
                 end_date = datetime.fromisoformat(end_date_str).date()
 
@@ -177,7 +177,9 @@ class MedicationEntry:
         """Record that a dose was skipped."""
         record = DoseRecord(timestamp=timestamp, taken=False, notes=notes)
         self.dose_history.append(record)
-        self._update_next_due(timestamp)
+        # When skipping, use the current next_due time (scheduled time) to calculate next due
+        scheduled_time = self.next_due if self.next_due else timestamp
+        self._update_next_due(scheduled_time)
         # Update status after recording dose
         self.update_status(timestamp)
 
@@ -260,43 +262,45 @@ class MedicationEntry:
 
         if next_due is None:
             self._current_status = STATE_NOT_DUE
-        elif current_time >= next_due:
-            # Check if it's significantly overdue (more than 2 hours)
-            if current_time > next_due + timedelta(hours=2):
-                self._current_status = STATE_OVERDUE
-            else:
-                self._current_status = STATE_DUE
         else:
-            # Not yet due based on next_due time, but check other conditions
-
-            # Check for recently skipped doses first (priority over taken status)
-            recently_skipped = self._check_recently_skipped(current_time)
+            # Check for recently skipped doses first (priority over all other statuses)
+            recently_skipped = self._check_recently_skipped(current_local)
             if recently_skipped:
                 self._current_status = STATE_SKIPPED
                 self._fire_state_change_event(old_status, self._current_status)
                 return
 
-            # For daily medications, check if recently taken within dose interval
-            if (
-                last_taken
-                and self.data.frequency == FREQUENCY_DAILY
-                and current_time - last_taken < self._get_dose_interval()
-            ):
-                self._current_status = STATE_TAKEN
-                self._fire_state_change_event(old_status, self._current_status)
-                return
+            # Check if medication is due or overdue
+            if current_local >= next_due:
+                # Check if it's significantly overdue (more than 2 hours)
+                if current_local > next_due + timedelta(hours=2):
+                    self._current_status = STATE_OVERDUE
+                else:
+                    self._current_status = STATE_DUE
+            else:
+                # Not yet due based on next_due time, but check other conditions
 
-            # For non-daily medications, check if recently taken
-            if (
-                last_taken
-                and self.data.frequency != FREQUENCY_DAILY
-                and current_time - last_taken < self._get_dose_interval()
-            ):
-                self._current_status = STATE_TAKEN
-                self._fire_state_change_event(old_status, self._current_status)
-                return
+                # For daily medications, check if taken today (same calendar day)
+                if (
+                    last_taken
+                    and self.data.frequency == FREQUENCY_DAILY
+                    and self._was_taken_today(current_local, last_taken)
+                ):
+                    self._current_status = STATE_TAKEN
+                    self._fire_state_change_event(old_status, self._current_status)
+                    return
 
-            self._current_status = STATE_NOT_DUE
+                # For non-daily medications, check if recently taken
+                if (
+                    last_taken
+                    and self.data.frequency != FREQUENCY_DAILY
+                    and current_local - last_taken < self._get_dose_interval()
+                ):
+                    self._current_status = STATE_TAKEN
+                    self._fire_state_change_event(old_status, self._current_status)
+                    return
+
+                self._current_status = STATE_NOT_DUE
 
         # Fire event for any status change
         self._fire_state_change_event(old_status, self._current_status)
@@ -336,14 +340,14 @@ class MedicationEntry:
             # Use dt_util.as_local to interpret this as a local time
             due_time = dt_util.as_local(naive_due_time)
 
-            if due_time > current_time:
+            if due_time > current_local:
                 if next_due is None or due_time < next_due:
                     next_due = due_time
 
         # If no future times today, check if any of today's times are still pending
         if next_due is None:
-            # Check if any of today's scheduled times haven't been taken yet
-            any_today_untaken = False
+            # Check if any of today's scheduled times haven't been handled yet
+            any_today_unhandled = False
             earliest_today_time = None
 
             for time_str in self.data.times:
@@ -357,16 +361,16 @@ class MedicationEntry:
                 if earliest_today_time is None or due_time < earliest_today_time:
                     earliest_today_time = due_time
 
-                # Check if this specific time was taken
-                if not self._was_dose_taken_for_time(due_time):
-                    any_today_untaken = True
-                    # Keep the earliest untaken time as next_due so it shows as overdue
+                # Check if this specific time was handled (taken or skipped)
+                if not self._was_dose_handled_for_time(due_time):
+                    any_today_unhandled = True
+                    # Keep the earliest unhandled time as next_due so it shows as overdue
                     if next_due is None or due_time < next_due:
                         next_due = due_time
 
-            # Only move to tomorrow if all of today's doses were actually taken
-            if not any_today_untaken:
-                # All times for today have been taken, get tomorrow's first time
+            # Only move to tomorrow if all of today's doses were handled (taken or skipped)
+            if not any_today_unhandled:
+                # All times for today have been handled, get tomorrow's first time
                 tomorrow = today + timedelta(days=1)
                 hour, minute = map(int, self.data.times[0].split(":"))
 
@@ -396,21 +400,150 @@ class MedicationEntry:
 
         return False
 
+    def _was_dose_handled_for_time(self, scheduled_time: datetime) -> bool:
+        """Check if a dose was either taken OR skipped for a specific scheduled time."""
+        if not self.dose_history:
+            return False
+
+        # For daily medications, check if any dose was taken or skipped on the same day
+        # as the scheduled time (between 00:00 and 23:59 local time)
+        scheduled_date = dt_util.as_local(scheduled_time).date()
+
+        for dose in self.dose_history:
+            dose_date = dt_util.as_local(dose.timestamp).date()
+            if dose_date == scheduled_date:
+                return True  # Either taken or skipped
+
+        return False
+
+    def _was_taken_today(self, current_time: datetime, last_taken: datetime) -> bool:
+        """Check if medication was taken today (same calendar day as current_time)."""
+        current_date = dt_util.as_local(current_time).date()
+        taken_date = dt_util.as_local(last_taken).date()
+        return current_date == taken_date
+
     def _calculate_weekly_next_due(self, current_time: datetime) -> None:
         """Calculate next due time for weekly medication."""
-        # Use the dynamic property instead of cached _last_taken
+        current_local = dt_util.as_local(current_time)
         last_taken = self.last_taken  # This calculates from dose_history
-        if last_taken:
-            self._next_due = last_taken + timedelta(weeks=1)
+
+        if not self.data.times:
+            # Default to once weekly at 9 AM if no times specified
+            self.data.times = ["09:00"]
+
+        # Get the first (and typically only) scheduled time for weekly meds
+        time_str = self.data.times[0]
+        hour, minute = map(int, time_str.split(":"))
+
+        # For weekly medications, we need to be smart about calculating from skipped doses
+        # Check if the current_time represents a scheduled dose time that's being skipped
+        current_date = current_local.date()
+        scheduled_time_today = datetime.combine(
+            current_date, datetime.min.time().replace(hour=hour, minute=minute)
+        )
+        scheduled_time_today_aware = dt_util.as_local(scheduled_time_today)
+
+        # If current_time matches a scheduled time (within reasonable window),
+        # and there's a recent skip, calculate from this scheduled time
+        if (
+            abs((current_local - scheduled_time_today_aware).total_seconds())
+            < 3600  # within 1 hour
+            and self.dose_history
+            and not self.dose_history[-1].taken
+        ):  # last record is a skip
+            # Calculate next dose: 7 days from the scheduled time being skipped
+            next_dose_date = current_date + timedelta(weeks=1)
+            naive_next_due = datetime.combine(
+                next_dose_date, datetime.min.time().replace(hour=hour, minute=minute)
+            )
+            self._next_due = dt_util.as_local(naive_next_due)
+        elif last_taken:
+            # Calculate next dose: 7 days from the date the last dose was taken,
+            # but at the scheduled time (not the time it was actually taken)
+            last_taken_local = dt_util.as_local(last_taken)
+            next_dose_date = last_taken_local.date() + timedelta(weeks=1)
+
+            # Create next due time at the scheduled hour/minute (not actual taken time)
+            naive_next_due = datetime.combine(
+                next_dose_date, datetime.min.time().replace(hour=hour, minute=minute)
+            )
+            self._next_due = dt_util.as_local(naive_next_due)
         else:
-            # First dose - use current time
-            self._next_due = current_time
+            # First dose - find the next occurrence of the scheduled time
+            # If we have a start_date, use it; otherwise use today
+            if self.data.start_date:
+                if isinstance(self.data.start_date, datetime):
+                    start_date = dt_util.as_local(self.data.start_date).date()
+                else:
+                    start_date = self.data.start_date
+            else:
+                start_date = current_local.date()
+
+            # Create the scheduled time for the start date
+            naive_due_time = datetime.combine(
+                start_date, datetime.min.time().replace(hour=hour, minute=minute)
+            )
+            due_time = dt_util.as_local(naive_due_time)
+
+            # If this time has already passed, move to next week
+            if due_time <= current_local:
+                next_week_date = start_date + timedelta(weeks=1)
+                naive_due_time = datetime.combine(
+                    next_week_date,
+                    datetime.min.time().replace(hour=hour, minute=minute),
+                )
+                due_time = dt_util.as_local(naive_due_time)
+
+            self._next_due = due_time
 
     def _calculate_monthly_next_due(self, current_time: datetime) -> None:
         """Calculate next due time for monthly medication."""
-        # Use the dynamic property instead of cached _last_taken
+        current_local = dt_util.as_local(current_time)
         last_taken = self.last_taken  # This calculates from dose_history
-        if last_taken:
+
+        # For monthly medications, check if we're calculating from a skipped dose
+        # Similar logic to weekly medications
+        if (
+            self.dose_history
+            and not self.dose_history[-1].taken  # Most recent was skipped
+            and last_taken
+        ):  # But we have a previous taken dose
+            # Calculate next dose from the skip time (current_time represents the skip)
+            # Move to next month from the current time
+            current_date = current_local.date()
+            try:
+                if current_date.month == 12:
+                    next_month_date = current_date.replace(
+                        year=current_date.year + 1, month=1
+                    )
+                else:
+                    next_month_date = current_date.replace(month=current_date.month + 1)
+
+                # Use the same time from the last taken dose for consistency
+                last_taken_local = dt_util.as_local(last_taken)
+                self._next_due = dt_util.as_local(
+                    datetime.combine(next_month_date, last_taken_local.time())
+                )
+            except ValueError:
+                # Handle day-of-month edge cases (e.g., Jan 31 -> Feb 28/29)
+                if current_date.month == 12:
+                    next_month_date = current_date.replace(
+                        year=current_date.year + 1, month=1, day=1
+                    )
+                else:
+                    next_month_date = current_date.replace(
+                        month=current_date.month + 1, day=1
+                    )
+
+                # Use 9 AM as default time
+                self._next_due = dt_util.as_local(
+                    datetime.combine(
+                        next_month_date, datetime.min.time().replace(hour=9, minute=0)
+                    )
+                )
+
+        elif last_taken:
+            # Normal case - calculate from last taken dose
             # Try to maintain the same day of month
             try:
                 if last_taken.month == 12:
@@ -435,16 +568,10 @@ class MedicationEntry:
         """Update next due time after a dose is taken."""
         if self.data.frequency == FREQUENCY_DAILY:
             self._calculate_daily_next_due(taken_time)
-        if self.data.frequency == FREQUENCY_WEEKLY:
-            self._next_due = taken_time + timedelta(weeks=1)
-        if self.data.frequency == FREQUENCY_MONTHLY:
-            try:
-                next_month = taken_time.replace(month=taken_time.month + 1)
-                self._next_due = next_month
-            except ValueError:
-                # Handle December -> January
-                next_year = taken_time.replace(year=taken_time.year + 1, month=1)
-                self._next_due = next_year
+        elif self.data.frequency == FREQUENCY_WEEKLY:
+            self._calculate_weekly_next_due(taken_time)
+        elif self.data.frequency == FREQUENCY_MONTHLY:
+            self._calculate_monthly_next_due(taken_time)
 
     def _get_dose_interval(self) -> timedelta:
         """Get the interval between doses."""
@@ -457,28 +584,40 @@ class MedicationEntry:
         return timedelta(days=1)
 
     def _check_recently_skipped(self, current_time: datetime) -> bool:
-        """Check if a dose was recently skipped for today's scheduled times."""
+        """Check if a dose was recently skipped."""
         if not self.dose_history:
             return False
 
         current_local = dt_util.as_local(current_time)
-        today = current_local.date()
 
-        # Get the most recent dose record for today
-        most_recent_today = None
-        for record in reversed(self.dose_history):
-            record_local = dt_util.as_local(record.timestamp)
-            record_date = record_local.date()
+        if self.data.frequency == FREQUENCY_DAILY:
+            # For daily meds, check for skips today only
+            today = current_local.date()
 
-            if record_date == today:
-                most_recent_today = record
-                break
-            if record_date < today:
-                # Stop looking at older records
-                break
+            # Get the most recent dose record for today
+            most_recent_today = None
+            for record in reversed(self.dose_history):
+                record_local = dt_util.as_local(record.timestamp)
+                record_date = record_local.date()
 
-        # If the most recent dose record for today was skipped, return True
-        if most_recent_today is not None and not most_recent_today.taken:
+                if record_date == today:
+                    most_recent_today = record
+                    break
+                if record_date < today:
+                    # Stop looking at older records
+                    break
+
+            # If the most recent dose record for today was skipped, return True
+            if most_recent_today is not None and not most_recent_today.taken:
+                return True
+        elif (
+            self.dose_history
+            and not self.dose_history[-1].taken  # Most recent was skipped
+            and self.next_due
+            and current_local < self.next_due
+        ):  # Still before next due
+            # For weekly/monthly meds, check if the most recent dose was skipped
+            # and it's still before the next scheduled dose
             return True
 
         return False

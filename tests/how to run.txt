@@ -1,0 +1,5 @@
+python -m pytest tests/components/medication_tracker/test_models.py -v
+
+or specific tests:
+
+python -m pytest tests/components/medication_tracker/test_models.py::TestMedicationStatusCalculation::test_medication_taken_yesterday_not_due_today_early tests/components/medication_tracker/test_models.py::TestMedicationStatusCalculation::test_medication_taken_late_yesterday_not_due_early_today tests/components/medication_tracker/test_models.py::TestMedicationStatusCalculation::test_midnight_boundary_edge_cases -v
