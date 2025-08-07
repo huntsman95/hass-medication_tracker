@@ -29,21 +29,84 @@ A comprehensive Home Assistant custom integration for tracking medications, sett
 
 The integration is configured through the Home Assistant UI. After installation, go to Configuration > Integrations and add the "Medication Tracker" integration.
 
+
 ## ✨ Key Features
 
 - **Interactive Web Panel**: Dedicated web interface for easy medication management
 - **Device-Based Organization**: Each medication creates its own device with all related entities grouped together
 - **Dynamic Entity Management**: Entities are created/removed automatically when medications are added/removed - no restart required!
 - **Comprehensive Medication Management**: Add, edit, remove, and track multiple medications via services and web UI
-- **Real-time Status Monitoring**: Live status updates (due, taken, overdue, not due, skipped) with automatic refresh
+- **Real-time Status Monitoring**: Live status updates (due, taken, overdue, not due, skipped) with automatic refresh and event emission
+- **Calendar Entity**: Dose history is now available as a Home Assistant calendar entity (`calendar.medication_tracker_dose_taken`)
+- **Event Emission**: Integration fires `medication_tracker_state_changed` events for automations and advanced tracking
 - **Timezone-Aware Scheduling**: Proper timezone handling for accurate medication timing
 - **Adherence Tracking**: Monitor medication adherence rates and missed doses
-- **Flexible Scheduling**: Support for daily, weekly, monthly, and as-needed medications
+- **Flexible Scheduling**: Support for daily, weekly, monthly, and as-needed medications, with improved logic for weekly/monthly schedules
 - **Multiple Daily Doses**: Support for medications taken multiple times per day
-- **Complete History**: Track all taken and skipped doses with timestamps
+- **Complete History**: Track all taken and skipped doses with timestamps, now visible in the calendar
 - **Skip Functionality**: Mark medications as skipped with proper status tracking
-- **Automation Ready**: Binary sensors for creating automations and alerts
+- **Automation Ready**: Binary sensors and events for creating automations and alerts
 - **Persistent Storage**: Data survives Home Assistant restarts with proper data consistency
+- **Robust Testing**: Unit tests on core logic help prevent regressions
+## 🗓️ Calendar Integration
+
+The integration creates a calendar entity `calendar.medication_tracker_dose_taken` that displays dose history for all medications as calendar events.
+
+**Features:**
+- Each dose (taken or skipped) appears as a 5-minute event at the recorded time
+- Event summary shows status and medication name (e.g., ✅ Taken: Aspirin (100mg))
+- Event description includes medication details, status, time, notes, and frequency
+- Viewable in the Home Assistant calendar interface for visual adherence tracking
+- Calendar updates in real time as doses are recorded
+
+**Example event details:**
+```
+Summary: ✅ Taken: Aspirin (100mg)
+Description:
+Medication: Aspirin
+Dosage: 100mg
+Status: Taken
+Time: 9:15 AM
+Notes: Taken with breakfast
+Frequency: daily
+```
+
+**Use Cases:**
+- Visualize dose history and adherence
+- Filter by date, export data, or use in dashboards
+- Automate notifications or reports based on calendar events
+## 📢 Events
+
+The integration fires a `medication_tracker_state_changed` event whenever a medication's status changes (e.g., from "not_due" to "due", or from "due" to "taken").
+
+**Event Data:**
+- `medication_id`: Unique identifier for the medication (now a UUID)
+- `device_id`: Device identifier
+- `name`, `dosage`, `frequency`, `notes`
+- `old_status`, `new_status`
+- `next_due`, `last_taken` (ISO datetimes)
+- `missed_doses`, `adherence_rate`
+
+**Status values:**
+- `not_due`, `due`, `overdue`, `taken`, `skipped`
+
+**Example automation:**
+```yaml
+automation:
+  - alias: "Medication Due Notification"
+    trigger:
+      - platform: event
+        event_type: medication_tracker_state_changed
+        event_data:
+          new_status: "due"
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          title: "Medication Due"
+          message: "{{ trigger.event.data.name }} ({{ trigger.event.data.dosage }}) is now due"
+          data:
+            tag: "medication_{{ trigger.event.data.medication_id }}"
+```
 
 ## 🌐 Web Management Panel
 
@@ -284,11 +347,12 @@ The integration implements robust data consistency:
 - **Timezone Accuracy**: All times properly handle DST and timezone changes
 - **Data Integrity**: Storage only contains persistent data, calculated values are never cached
 
+
 ## Finding Medication IDs
 
-Each medication gets a unique ID like `med_1`, `med_2`, etc. To find the ID:
+Each medication now uses a UUID as its unique ID. To find the ID:
 
-1. **ID Sensor**: Each medication now has an ID sensor that displays the medication ID directly
+1. **ID Sensor**: Each medication has an ID sensor displaying the medication ID
 2. **Check Home Assistant logs** after adding a medication
 3. **Look at entity unique_ids** in Developer Tools > States
 4. **Device names** in Settings > Devices & Services show the medication name
@@ -345,7 +409,7 @@ logger:
 
 ### Web Interface:
 - ✅ Dedicated management panel
-- ✅ Real-time auto-refresh (30s intervals)
+- ✅ Real-time auto-refresh (30s intervals) and event-driven updates
 - ✅ Manual refresh button with animation
 - ✅ Add medication form with validation
 - ✅ Edit medication dialog
@@ -356,12 +420,24 @@ logger:
 ### Backend Features:
 - ✅ Device-based organization
 - ✅ Timezone-aware scheduling
-- ✅ Multiple dose frequencies
+- ✅ Multiple dose frequencies (daily, weekly, monthly, as-needed)
 - ✅ Date range support
 - ✅ Complete CRUD operations
 - ✅ Skip functionality
 - ✅ Adherence tracking
-- ✅ Real-time status updates
+- ✅ Real-time status updates and event emission
+- ✅ Calendar entity for dose history
 - ✅ Data consistency guarantees
 - ✅ Persistent storage
-- ✅ Binary sensor automation support
+- ✅ Binary sensor and event automation support
+- ✅ Robust unit testing to prevent regressions
+
+## 📝 Changelog (Recent Highlights)
+
+- **v1.4.2**: Bugfixes for status logic and improved weekly/monthly scheduling
+- **v1.4.0**: Added dose history calendar entity
+- **v1.3.0**: Integration now emits events for automations
+- **v1.2.0**: Medication IDs now use UUIDs
+- **Ongoing**: Unit tests on core logic to validate changes and prevent regressions
+
+See `CHANGELOG.md` for full details.

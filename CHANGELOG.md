@@ -1,3 +1,8 @@
+v1.4.2
+- BUGFIX: Fixed incorrect "taken" status for not_due medications (regression of bug fixed in 1.3.0)
+- BUGFIX: Implemented correct logic for weekly and monthly medications. Before they were basically unusable as I battled bugs with daily meds like crazy.
+- NOTE: Unit tests on model.py are now being used to validate changes to the codebase before pushing a release so we should see less regressions.
+
 v1.4.1
 - BUGFIX: Fixed bug introduced in v1.3.1 where dose taken in overdue state was not triggering status sensor to change to "taken" status
 
