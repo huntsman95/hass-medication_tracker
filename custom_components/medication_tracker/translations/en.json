@@ -78,6 +78,88 @@
           "description": "The ID of the medication to remove."
         }
       }
+    },
+    "update_medication": {
+      "name": "Update Medication",
+      "description": "Update an existing medication's information.",
+      "fields": {
+        "medication_id": {
+          "name": "Medication ID",
+          "description": "The ID of the medication to update."
+        },
+        "name": {
+          "name": "Medication Name",
+          "description": "The name of the medication."
+        },
+        "dosage": {
+          "name": "Dosage",
+          "description": "The dosage information."
+        },
+        "frequency": {
+          "name": "Frequency",
+          "description": "How often to take the medication."
+        },
+        "times": {
+          "name": "Times",
+          "description": "Times to take the medication."
+        },
+        "notes": {
+          "name": "Notes",
+          "description": "Optional notes about the medication."
+        },
+        "supply_tracking_enabled": {
+          "name": "Enable Supply Tracking",
+          "description": "Enable supply tracking for this medication."
+        },
+        "current_supply": {
+          "name": "Current Supply",
+          "description": "Current number of units in stock."
+        },
+        "pills_per_dose": {
+          "name": "Units Per Dose",
+          "description": "Number of units taken per dose."
+        },
+        "refill_reminder_threshold": {
+          "name": "Refill Reminder Threshold",
+          "description": "Days of supply remaining before triggering low supply alert."
+        },
+        "show_refill_on_calendar": {
+          "name": "Show Refill on Calendar",
+          "description": "Display estimated refill date on the medication calendar."
+        }
+      }
+    },
+    "refill_medication": {
+      "name": "Refill Medication",
+      "description": "Add units to a medication's supply.",
+      "fields": {
+        "medication_id": {
+          "name": "Medication ID",
+          "description": "The ID of the medication to refill."
+        },
+        "refill_amount": {
+          "name": "Refill Amount",
+          "description": "The number of units to add to the supply."
+        },
+        "datetime": {
+          "name": "Refill Date",
+          "description": "When the refill occurred (optional - defaults to now)."
+        }
+      }
+    },
+    "update_supply": {
+      "name": "Update Supply",
+      "description": "Manually set a medication's current supply count.",
+      "fields": {
+        "medication_id": {
+          "name": "Medication ID",
+          "description": "The ID of the medication to update."
+        },
+        "current_supply": {
+          "name": "Current Supply",
+          "description": "The new supply count."
+        }
+      }
     }
   }
 }

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import logging
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
@@ -60,7 +60,6 @@ class MedicationTrackerCalendar(CalendarEntity):
         """Return calendar events within a datetime range."""
         events = []
 
-        # Get all medications from the coordinator
         medications = self._coordinator.data.get("medications", {})
 
         for medication_id, medication in medications.items():
@@ -68,28 +67,42 @@ class MedicationTrackerCalendar(CalendarEntity):
             for dose_record in medication.dose_history:
                 dose_time = dose_record.timestamp
 
-                # Check if the dose time falls within the requested range
-                if start_date <= dose_time <= end_date:
-                    # Create event for each dose
+                # Compare using dates to avoid timezone issues
+                if start_date.date() <= dose_time.date() <= end_date.date():
                     event_summary = self._create_event_summary(medication, dose_record)
                     event_description = self._create_event_description(
                         medication, dose_record
                     )
 
-                    # Create 5-minute duration event
-                    event_start = dose_time
-                    event_end = dose_time + timedelta(minutes=5)
-
                     event = CalendarEvent(
-                        start=event_start,
-                        end=event_end,
+                        start=dose_time,
+                        end=dose_time + timedelta(minutes=5),
                         summary=event_summary,
                         description=event_description,
                         uid=f"{DOMAIN}_{medication_id}_{dose_time.isoformat()}",
                     )
                     events.append(event)
 
-        # Sort events by start time
+            # Add estimated refill date event if enabled
+            if (
+                medication.data.supply_tracking_enabled
+                and medication.data.show_refill_on_calendar
+            ):
+                refill_date = medication.estimated_refill_date
+                if refill_date and start_date.date() <= refill_date <= end_date.date():
+                    refill_datetime = datetime.combine(
+                        refill_date, datetime.min.time().replace(hour=9, minute=0),
+                        tzinfo=start_date.tzinfo
+                    )
+                    event = CalendarEvent(
+                        start=refill_datetime,
+                        end=refill_datetime + timedelta(hours=1),
+                        summary=f"💊 Refill Needed: {medication.data.name}",
+                        description=self._create_refill_event_description(medication),
+                        uid=f"{DOMAIN}_{medication_id}_refill_{refill_date.isoformat()}",
+                    )
+                    events.append(event)
+
         events.sort(key=lambda x: x.start)
         return events
 
@@ -113,6 +126,30 @@ class MedicationTrackerCalendar(CalendarEntity):
 
         if medication.data.frequency:
             description_parts.append(f"Frequency: {medication.data.frequency}")
+
+        return "\n".join(description_parts)
+
+    def _create_refill_event_description(self, medication) -> str:
+        """Create a description for the refill calendar event."""
+        description_parts = [
+            f"Medication: {medication.data.name}",
+            f"Current Supply: {medication.data.current_supply} units",
+        ]
+
+        daily_consumption = medication.daily_consumption
+        if daily_consumption:
+            description_parts.append(
+                f"Daily Consumption: {daily_consumption:.1f} units/day"
+            )
+
+        days_remaining = medication.days_of_supply_remaining
+        if days_remaining is not None:
+            description_parts.append(f"Days Remaining: {days_remaining:.1f}")
+
+        if medication.data.last_refill_date:
+            description_parts.append(
+                f"Last Refill: {medication.data.last_refill_date.isoformat()}"
+            )
 
         return "\n".join(description_parts)
 

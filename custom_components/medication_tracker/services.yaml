@@ -84,6 +84,48 @@ add_medication:
       selector:
         text:
           multiline: true
+    supply_tracking_enabled:
+      name: Enable Supply Tracking
+      description: Enable supply tracking for this medication.
+      required: false
+      default: false
+      selector:
+        boolean:
+    current_supply:
+      name: Current Supply
+      description: Current number of units in stock.
+      required: false
+      selector:
+        number:
+          min: 0
+          step: 0.5
+          mode: box
+    pills_per_dose:
+      name: Units Per Dose
+      description: Number of units taken per dose.
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 0.5
+          step: 0.5
+          mode: box
+    refill_reminder_threshold:
+      name: Refill Reminder Threshold
+      description: Days of supply remaining before triggering low supply alert.
+      required: false
+      default: 7
+      selector:
+        number:
+          min: 1
+          mode: box
+    show_refill_on_calendar:
+      name: Show Refill on Calendar
+      description: Display estimated refill date on the medication calendar.
+      required: false
+      default: false
+      selector:
+        boolean:
 
 remove_medication:
   name: Remove Medication
@@ -154,3 +196,87 @@ update_medication:
       selector:
         text:
           multiline: true
+    supply_tracking_enabled:
+      name: Enable Supply Tracking
+      description: Enable or disable supply tracking (optional - will keep existing if not provided).
+      required: false
+      selector:
+        boolean:
+    current_supply:
+      name: Current Supply
+      description: Current number of units in stock (optional - will keep existing if not provided).
+      required: false
+      selector:
+        number:
+          min: 0
+          step: 0.5
+          mode: box
+    pills_per_dose:
+      name: Units Per Dose
+      description: Number of units taken per dose (optional - will keep existing if not provided).
+      required: false
+      selector:
+        number:
+          min: 0.5
+          step: 0.5
+          mode: box
+    refill_reminder_threshold:
+      name: Refill Reminder Threshold
+      description: Days of supply remaining before triggering low supply alert (optional - will keep existing if not provided).
+      required: false
+      selector:
+        number:
+          min: 1
+          mode: box
+    show_refill_on_calendar:
+      name: Show Refill on Calendar
+      description: Display estimated refill date on the medication calendar (optional - will keep existing if not provided).
+      required: false
+      selector:
+        boolean:
+
+refill_medication:
+  name: Refill Medication
+  description: Add units to a medication's supply.
+  fields:
+    medication_id:
+      name: Medication ID
+      description: The ID of the medication to refill.
+      required: true
+      selector:
+        text:
+    refill_amount:
+      name: Refill Amount
+      description: The number of units to add to the supply.
+      required: true
+      selector:
+        number:
+          min: 0.5
+          step: 0.5
+          mode: box
+    datetime:
+      name: Refill Date
+      description: When the refill occurred (optional - defaults to now).
+      required: false
+      selector:
+        datetime:
+
+update_supply:
+  name: Update Supply
+  description: Manually set a medication's current supply count.
+  fields:
+    medication_id:
+      name: Medication ID
+      description: The ID of the medication to update.
+      required: true
+      selector:
+        text:
+    current_supply:
+      name: Current Supply
+      description: The new supply count.
+      required: true
+      selector:
+        number:
+          min: 0
+          step: 0.5
+          mode: box

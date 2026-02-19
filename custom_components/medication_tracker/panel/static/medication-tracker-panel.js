@@ -17,9 +17,15 @@ class MedicationTrackerPanel extends LitElement {
       _loading: { type: Boolean, state: true },
       _showAddDialog: { type: Boolean, state: true },
       _showEditDialog: { type: Boolean, state: true },
+      _showRefillDialog: { type: Boolean, state: true },
       _newMedication: { type: Object, state: true },
       _editMedication: { type: Object, state: true },
       _editMedicationId: { type: String, state: true },
+      _refillMedicationId: { type: String, state: true },
+      _refillAmount: { type: Number, state: true },
+      _showSuppliesOverview: { type: Boolean, state: true },
+      _addFormTouched: { type: Boolean, state: true },
+      _editFormTouched: { type: Boolean, state: true },
     };
   }
 
@@ -29,6 +35,7 @@ class MedicationTrackerPanel extends LitElement {
     this._loading = true;
     this._showAddDialog = false;
     this._showEditDialog = false;
+    this._showRefillDialog = false;
     this._newMedication = {
       name: "",
       dosage: "",
@@ -37,6 +44,11 @@ class MedicationTrackerPanel extends LitElement {
       start_date: "",
       end_date: "",
       notes: "",
+      supply_tracking_enabled: false,
+      current_supply: "",
+      pills_per_dose: 1,
+      refill_reminder_threshold: 7,
+      show_refill_on_calendar: false,
     };
     this._editMedication = {
       name: "",
@@ -46,8 +58,18 @@ class MedicationTrackerPanel extends LitElement {
       start_date: "",
       end_date: "",
       notes: "",
+      supply_tracking_enabled: false,
+      current_supply: "",
+      pills_per_dose: 1,
+      refill_reminder_threshold: 7,
+      show_refill_on_calendar: false,
     };
     this._editMedicationId = "";
+    this._refillMedicationId = "";
+    this._refillAmount = 30;
+    this._showSuppliesOverview = true;
+    this._addFormTouched = false;
+    this._editFormTouched = false;
     this._hassUpdateTimeout = null;
     this._unsubscribeEvents = null;
     this._subscribedEntities = new Set();
@@ -448,6 +470,24 @@ class MedicationTrackerPanel extends LitElement {
         color: var(--primary-text-color);
       }
 
+      .form-label.required::after {
+        content: " *";
+        color: var(--error-color, #db4437);
+      }
+
+      .form-hint {
+        font-size: 0.85em;
+        color: var(--secondary-text-color);
+        margin-top: 8px;
+      }
+
+      .form-input.invalid,
+      .form-select.invalid,
+      .form-textarea.invalid {
+        border-color: var(--error-color, #db4437);
+        box-shadow: 0 0 0 1px var(--error-color, #db4437);
+      }
+
       .form-input,
       .form-select,
       .form-textarea {
@@ -553,20 +593,208 @@ class MedicationTrackerPanel extends LitElement {
         font-weight: 400;
         box-sizing: border-box;
     }
+
+      /* Supply tracking styles */
+      .supply-section {
+        border-top: 1px solid var(--divider-color);
+        margin-top: 12px;
+        padding-top: 12px;
+      }
+
+      .low-supply-value {
+        color: var(--error-color, #db4437);
+        font-weight: bold;
+      }
+
+      .low-supply-warning {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--error-color, #db4437);
+        background: rgba(219, 68, 55, 0.1);
+        padding: 8px 12px;
+        border-radius: 4px;
+        margin-top: 8px;
+        font-size: 0.9em;
+      }
+
+      .refill-button {
+        background: var(--info-color, #4285f4);
+        color: var(--text-primary-color, white);
+      }
+
+      .refill-button:hover {
+        -moz-box-shadow: inset 0 0 100px 100px rgba(255, 255, 255, 0.3);
+        -webkit-box-shadow: inset 0 0 100px 100px rgba(255, 255, 255, 0.3);
+        box-shadow: inset 0 0 100px 100px rgba(255, 255, 255, 0.3);
+      }
+
+      .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+      }
+
+      .checkbox-label input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+      }
+
+      .supply-fields {
+        background: var(--secondary-background-color, #f5f5f5);
+        padding: 12px;
+        border-radius: 4px;
+        margin-top: 8px;
+        margin-bottom: 8px;
+      }
+
+      .refill-dialog {
+        max-width: 350px;
+      }
+
+      /* Supplies Overview Styles */
+      .supplies-overview {
+        background: var(--card-background-color);
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 24px;
+        box-shadow: var(--ha-card-box-shadow);
+        border: 1px solid var(--divider-color);
+      }
+
+      .supplies-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .supplies-header:hover {
+        opacity: 0.8;
+      }
+
+      .supplies-title {
+        font-size: 1.2em;
+        font-weight: 500;
+        color: var(--primary-text-color);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .supplies-toggle {
+        transition: transform 0.2s ease;
+      }
+
+      .supplies-toggle.collapsed {
+        transform: rotate(-90deg);
+      }
+
+      .supplies-content {
+        margin-top: 16px;
+      }
+
+      .supplies-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .supplies-table th,
+      .supplies-table td {
+        padding: 10px 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--divider-color);
+      }
+
+      .supplies-table th {
+        font-weight: 500;
+        color: var(--secondary-text-color);
+        font-size: 0.9em;
+        text-transform: uppercase;
+      }
+
+      .supplies-table tr:last-child td {
+        border-bottom: none;
+      }
+
+      .supplies-table tr:hover {
+        background: var(--secondary-background-color);
+      }
+
+      .supply-status-ok {
+        color: var(--success-color, #4caf50);
+      }
+
+      .supply-status-low {
+        color: var(--error-color, #db4437);
+        font-weight: bold;
+      }
+
+      .supply-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.85em;
+      }
+
+      .supply-badge-ok {
+        background: rgba(76, 175, 80, 0.15);
+        color: var(--success-color, #4caf50);
+      }
+
+      .supply-badge-low {
+        background: rgba(219, 68, 55, 0.15);
+        color: var(--error-color, #db4437);
+      }
+
+      .supplies-empty {
+        text-align: center;
+        padding: 24px;
+        color: var(--secondary-text-color);
+      }
+
+      .refill-button-small {
+        background: var(--info-color, #4285f4);
+        color: var(--text-primary-color, white);
+        border: none;
+        border-radius: 4px;
+        padding: 4px 8px;
+        cursor: pointer;
+        font-size: 0.85em;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .refill-button-small:hover {
+        -moz-box-shadow: inset 0 0 100px 100px rgba(255, 255, 255, 0.3);
+        -webkit-box-shadow: inset 0 0 100px 100px rgba(255, 255, 255, 0.3);
+        box-shadow: inset 0 0 100px 100px rgba(255, 255, 255, 0.3);
+      }
+
+      @media (max-width: 600px) {
+        .supplies-table th,
+        .supplies-table td {
+          padding: 8px 6px;
+          font-size: 0.85em;
+        }
+
+        .supplies-table th:nth-child(4),
+        .supplies-table td:nth-child(4) {
+          display: none;
+        }
+      }
     `;
   }
 
   firstUpdated() {
     // Initial load is handled by _setupEventSubscriptions in connectedCallback
-  }
-
-  willUpdate(changedProps) {
-    super.willUpdate(changedProps);
-
-    // If hass has changed, refresh event subscriptions
-    if (changedProps.has("hass") && this.hass) {
-      this._setupEventSubscriptions();
-    }
   }
 
   async _loadMedications() {
@@ -612,12 +840,16 @@ class MedicationTrackerPanel extends LitElement {
           const idSensorId = `sensor.${baseName}_id${suffix}`;
           const adherenceSensorId = `sensor.${baseName}_adherence${suffix}`;
           const dueSensorId = `binary_sensor.${baseName}_due${suffix}`;
+          const supplySensorId = `sensor.${baseName}_supply${suffix}`;
+          const lowSupplySensorId = `binary_sensor.${baseName}_low_supply${suffix}`;
 
           console.log(`Mapping ${entityId} -> ID sensor: ${idSensorId}`);
 
           const idSensor = this.hass.states[idSensorId];
           const adherenceSensor = this.hass.states[adherenceSensorId];
           const dueSensor = this.hass.states[dueSensorId];
+          const supplySensor = this.hass.states[supplySensorId];
+          const lowSupplySensor = this.hass.states[lowSupplySensorId];
 
           // The actual medication ID should ALWAYS be from the ID sensor state (UUID)
           // This is critical for duplicate medication names where entity IDs get _2, _3, etc
@@ -654,6 +886,15 @@ class MedicationTrackerPanel extends LitElement {
             notes: state.attributes.notes,
             next_due: state.attributes.next_due,
             last_taken: state.attributes.last_taken,
+            // Supply tracking fields - check if supply sensor is available (not unavailable/unknown)
+            supply_tracking_enabled: supplySensor && supplySensor.state !== "unavailable" && supplySensor.state !== "unknown",
+            current_supply: supplySensor?.state !== "unavailable" && supplySensor?.state !== "unknown" ? supplySensor?.state : null,
+            pills_per_dose: supplySensor?.attributes?.pills_per_dose || 1,
+            refill_reminder_threshold: supplySensor?.attributes?.refill_threshold_days || 7,
+            show_refill_on_calendar: supplySensor?.attributes?.show_refill_on_calendar || false,
+            days_remaining: supplySensor?.attributes?.days_remaining,
+            estimated_refill_date: supplySensor?.attributes?.estimated_refill_date,
+            low_supply: lowSupplySensor?.state === "on",
           });
         }
       }
@@ -722,6 +963,7 @@ class MedicationTrackerPanel extends LitElement {
 
   _hideAddMedicationDialog() {
     this._showAddDialog = false;
+    this._addFormTouched = false;
     this._resetNewMedication();
   }
 
@@ -734,11 +976,17 @@ class MedicationTrackerPanel extends LitElement {
       start_date: "",
       end_date: "",
       notes: "",
+      supply_tracking_enabled: false,
+      current_supply: "",
+      pills_per_dose: 1,
+      refill_reminder_threshold: 7,
+      show_refill_on_calendar: false,
     };
   }
 
   _updateNewMedication(field, value) {
     this._newMedication = { ...this._newMedication, [field]: value };
+    this.requestUpdate();
   }
 
   _addTime() {
@@ -761,6 +1009,13 @@ class MedicationTrackerPanel extends LitElement {
   }
 
   async _saveMedication() {
+    // Validate required fields
+    if (!this._newMedication?.name || !this._newMedication?.dosage) {
+      this._addFormTouched = true;
+      this.requestUpdate();
+      return;
+    }
+
     try {
       const data = {
         name: this._newMedication.name,
@@ -776,6 +1031,17 @@ class MedicationTrackerPanel extends LitElement {
 
       if (this._newMedication.end_date) {
         data.end_date = this._newMedication.end_date;
+      }
+
+      // Supply tracking fields
+      data.supply_tracking_enabled = this._newMedication.supply_tracking_enabled;
+      if (this._newMedication.supply_tracking_enabled) {
+        if (this._newMedication.current_supply !== "" && this._newMedication.current_supply !== null) {
+          data.current_supply = parseFloat(this._newMedication.current_supply);
+        }
+        data.pills_per_dose = parseFloat(this._newMedication.pills_per_dose) || 1;
+        data.refill_reminder_threshold = parseInt(this._newMedication.refill_reminder_threshold) || 7;
+        data.show_refill_on_calendar = this._newMedication.show_refill_on_calendar;
       }
 
       await this.hass.callService("medication_tracker", "add_medication", data);
@@ -802,6 +1068,11 @@ class MedicationTrackerPanel extends LitElement {
       start_date: this._formatDateForInput(medication.start_date),
       end_date: this._formatDateForInput(medication.end_date),
       notes: medication.notes || "",
+      supply_tracking_enabled: medication.supply_tracking_enabled || false,
+      current_supply: medication.current_supply || "",
+      pills_per_dose: medication.pills_per_dose || 1,
+      refill_reminder_threshold: medication.refill_reminder_threshold || 7,
+      show_refill_on_calendar: medication.show_refill_on_calendar || false,
     };
     this._showEditDialog = true;
   }
@@ -809,6 +1080,7 @@ class MedicationTrackerPanel extends LitElement {
   _hideEditMedicationDialog() {
     this._showEditDialog = false;
     this._editMedicationId = "";
+    this._editFormTouched = false;
     this._resetEditMedication();
   }
 
@@ -821,11 +1093,17 @@ class MedicationTrackerPanel extends LitElement {
       start_date: "",
       end_date: "",
       notes: "",
+      supply_tracking_enabled: false,
+      current_supply: "",
+      pills_per_dose: 1,
+      refill_reminder_threshold: 7,
+      show_refill_on_calendar: false,
     };
   }
 
   _updateEditMedication(field, value) {
     this._editMedication = { ...this._editMedication, [field]: value };
+    this.requestUpdate();
   }
 
   _addEditTime() {
@@ -848,6 +1126,13 @@ class MedicationTrackerPanel extends LitElement {
   }
 
   async _updateMedication() {
+    // Validate required fields
+    if (!this._editMedication?.name || !this._editMedication?.dosage) {
+      this._editFormTouched = true;
+      this.requestUpdate();
+      return;
+    }
+
     try {
       const data = {
         medication_id: this._editMedicationId,
@@ -866,6 +1151,17 @@ class MedicationTrackerPanel extends LitElement {
         data.end_date = this._editMedication.end_date;
       }
 
+      // Supply tracking fields
+      data.supply_tracking_enabled = this._editMedication.supply_tracking_enabled;
+      if (this._editMedication.supply_tracking_enabled) {
+        if (this._editMedication.current_supply !== "" && this._editMedication.current_supply !== null) {
+          data.current_supply = parseFloat(this._editMedication.current_supply);
+        }
+        data.pills_per_dose = parseFloat(this._editMedication.pills_per_dose) || 1;
+        data.refill_reminder_threshold = parseInt(this._editMedication.refill_reminder_threshold) || 7;
+        data.show_refill_on_calendar = this._editMedication.show_refill_on_calendar;
+      }
+
       await this.hass.callService("medication_tracker", "update_medication", data);
       this._hideEditMedicationDialog();
       // Event subscription will automatically update the UI
@@ -874,8 +1170,52 @@ class MedicationTrackerPanel extends LitElement {
     }
   }
 
+  // Refill dialog methods
+  _openRefillDialog(medicationId) {
+    this._refillMedicationId = medicationId;
+    this._refillAmount = 30;
+    this._showRefillDialog = true;
+  }
+
+  _hideRefillDialog() {
+    this._showRefillDialog = false;
+    this._refillMedicationId = "";
+    this._refillAmount = 30;
+  }
+
+  async _refillMedication() {
+    try {
+      await this.hass.callService("medication_tracker", "refill_medication", {
+        medication_id: this._refillMedicationId,
+        refill_amount: parseFloat(this._refillAmount),
+      });
+      this._hideRefillDialog();
+      // Event subscription will automatically update the UI
+    } catch (error) {
+      console.error("Error refilling medication:", error);
+    }
+  }
+
+  _toggleSuppliesOverview() {
+    this._showSuppliesOverview = !this._showSuppliesOverview;
+  }
+
+  _getMedicationsWithSupply() {
+    if (!this._medications || !Array.isArray(this._medications)) {
+      return [];
+    }
+    return this._medications.filter(med => med.supply_tracking_enabled);
+  }
+
   _getStatusClass(status) {
     return `medication-status status-${status.replace("_", "-")}`;
+  }
+
+  _formatNumber(value) {
+    if (value == null) return '0';
+    const num = Number(value);
+    if (isNaN(num)) return '0';
+    return Number.isInteger(num) ? num : num.toFixed(1);
   }
 
   _formatDate(dateString) {
@@ -922,6 +1262,81 @@ class MedicationTrackerPanel extends LitElement {
     return "";
   }
 
+  _renderSuppliesOverview() {
+    const medicationsWithSupply = this._getMedicationsWithSupply();
+
+    // Don't show the section if no medications have supply tracking
+    if (medicationsWithSupply.length === 0) {
+      return '';
+    }
+
+    // Sort by days remaining (lowest first) to show most urgent at top
+    const sortedMedications = [...medicationsWithSupply].sort((a, b) => {
+      const aDays = a.days_remaining ?? Infinity;
+      const bDays = b.days_remaining ?? Infinity;
+      return aDays - bDays;
+    });
+
+    return html`
+      <div class="supplies-overview">
+        <div class="supplies-header" @click=${this._toggleSuppliesOverview}>
+          <h3 class="supplies-title">
+            <ha-icon icon="mdi:pill-multiple"></ha-icon>
+            Supplies Overview
+          </h3>
+          <ha-icon
+            icon="mdi:chevron-down"
+            class="supplies-toggle ${this._showSuppliesOverview ? '' : 'collapsed'}"
+          ></ha-icon>
+        </div>
+
+        ${this._showSuppliesOverview ? html`
+          <div class="supplies-content">
+            <table class="supplies-table">
+              <thead>
+                <tr>
+                  <th>Medication</th>
+                  <th>Supply</th>
+                  <th>Days Left</th>
+                  <th>Refill By</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${sortedMedications.map(med => html`
+                  <tr>
+                    <td><strong>${med.name}</strong></td>
+                    <td>${this._formatNumber(med.current_supply)} units</td>
+                    <td class="${med.low_supply ? 'supply-status-low' : ''}">
+                      ${med.days_remaining != null ? this._formatNumber(med.days_remaining) : '—'}
+                    </td>
+                    <td>${med.estimated_refill_date ? this._formatDate(med.estimated_refill_date) : '—'}</td>
+                    <td>
+                      <span class="supply-badge ${med.low_supply ? 'supply-badge-low' : 'supply-badge-ok'}">
+                        ${med.low_supply ? html`<ha-icon icon="mdi:alert"></ha-icon> Low` : 'OK'}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        class="refill-button-small"
+                        @click=${() => this._openRefillDialog(med.id)}
+                        title="Refill ${med.name}"
+                      >
+                        <ha-icon icon="mdi:plus"></ha-icon>
+                        Refill
+                      </button>
+                    </td>
+                  </tr>
+                `)}
+              </tbody>
+            </table>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
   render() {
     return html`
 
@@ -940,6 +1355,8 @@ class MedicationTrackerPanel extends LitElement {
                 </button>
               </div>
             </div>
+
+      ${this._renderSuppliesOverview()}
 
       ${this._loading
         ? html`<div class="loading">Loading medications...</div>`
@@ -1010,6 +1427,37 @@ class MedicationTrackerPanel extends LitElement {
                           >${this._formatDate(med.end_date)}</span
                         >
                       </div>
+
+                      ${med.supply_tracking_enabled
+                ? html`
+                        <div class="supply-section">
+                          <div class="medication-detail">
+                            <span class="detail-label">Current Supply:</span>
+                            <span class="detail-value ${med.low_supply ? 'low-supply-value' : ''}">${this._formatNumber(med.current_supply)} units</span>
+                          </div>
+                          <div class="medication-detail">
+                            <span class="detail-label">Days Remaining:</span>
+                            <span class="detail-value">${med.days_remaining != null ? this._formatNumber(med.days_remaining) : '—'}</span>
+                          </div>
+                          ${med.estimated_refill_date
+                    ? html`
+                            <div class="medication-detail">
+                              <span class="detail-label">Refill By:</span>
+                              <span class="detail-value">${this._formatDate(med.estimated_refill_date)}</span>
+                            </div>
+                          `
+                    : ''}
+                          ${med.low_supply
+                    ? html`
+                            <div class="low-supply-warning">
+                              <ha-icon icon="mdi:alert"></ha-icon>
+                              Low Supply - Refill Needed
+                            </div>
+                          `
+                    : ''}
+                        </div>
+                      `
+                : ''}
                     </div>
 
                     <div class="medication-actions">
@@ -1036,6 +1484,17 @@ class MedicationTrackerPanel extends LitElement {
                                 Take
                               </button>
                             `}
+                        ${med.supply_tracking_enabled
+                ? html`
+                              <button
+                                class="action-button refill-button"
+                                @click=${() => this._openRefillDialog(med.id)}
+                                title="Refill medication"
+                              >
+                                <ha-icon icon="mdi:pill-multiple"></ha-icon>
+                              </button>
+                            `
+                : ''}
                         <button
                           class="action-button edit-button"
                           @click=${() => this._showEditMedicationDialog(med.id)}
@@ -1072,26 +1531,28 @@ class MedicationTrackerPanel extends LitElement {
                 </div>
 
                 <div class="form-field">
-                  <label class="form-label">Name</label>
+                  <label class="form-label required">Name</label>
                   <input
-                    class="form-input"
+                    class="form-input ${this._addFormTouched && !this._newMedication?.name ? 'invalid' : ''}"
                     type="text"
                     .value=${this._newMedication.name}
                     @input=${(e) =>
             this._updateNewMedication("name", e.target.value)}
                     placeholder="e.g., Vitamin D"
+                    required
                   />
                 </div>
 
                 <div class="form-field">
-                  <label class="form-label">Dosage</label>
+                  <label class="form-label required">Dosage</label>
                   <input
-                    class="form-input"
+                    class="form-input ${this._addFormTouched && !this._newMedication?.dosage ? 'invalid' : ''}"
                     type="text"
                     .value=${this._newMedication.dosage}
                     @input=${(e) =>
             this._updateNewMedication("dosage", e.target.value)}
                     placeholder="e.g., 1000 IU, 2 tablets"
+                    required
                   />
                 </div>
 
@@ -1173,18 +1634,88 @@ class MedicationTrackerPanel extends LitElement {
                   ></textarea>
                 </div>
 
+                <div class="form-field">
+                  <label class="form-label checkbox-label">
+                    <input
+                      type="checkbox"
+                      .checked=${this._newMedication.supply_tracking_enabled}
+                      @change=${(e) =>
+            this._updateNewMedication("supply_tracking_enabled", e.target.checked)}
+                    />
+                    Enable Supply Tracking
+                  </label>
+                </div>
+
+                ${this._newMedication.supply_tracking_enabled
+          ? html`
+                  <div class="supply-fields">
+                    <div class="form-field">
+                      <label class="form-label">Current Supply (units)</label>
+                      <input
+                        class="form-input"
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        .value=${this._newMedication.current_supply}
+                        @input=${(e) =>
+              this._updateNewMedication("current_supply", e.target.value)}
+                      />
+                    </div>
+
+                    <div class="form-field">
+                      <label class="form-label">Units Per Dose</label>
+                      <input
+                        class="form-input"
+                        type="number"
+                        min="0.5"
+                        step="0.5"
+                        .value=${this._newMedication.pills_per_dose}
+                        @input=${(e) =>
+              this._updateNewMedication("pills_per_dose", parseFloat(e.target.value) || 1)}
+                      />
+                    </div>
+
+                    <div class="form-field">
+                      <label class="form-label">Refill Reminder (days before empty)</label>
+                      <input
+                        class="form-input"
+                        type="number"
+                        min="1"
+                        .value=${this._newMedication.refill_reminder_threshold}
+                        @input=${(e) =>
+              this._updateNewMedication("refill_reminder_threshold", parseInt(e.target.value) || 7)}
+                      />
+                    </div>
+
+                    <div class="form-field">
+                      <label class="form-label checkbox-label">
+                        <input
+                          type="checkbox"
+                          .checked=${this._newMedication.show_refill_on_calendar}
+                          @change=${(e) =>
+              this._updateNewMedication("show_refill_on_calendar", e.target.checked)}
+                        />
+                        Show Refill Date on Calendar
+                      </label>
+                    </div>
+                  </div>
+                `
+          : ''}
+
+                ${this._addFormTouched && (!this._newMedication?.name || !this._newMedication?.dosage)
+                  ? html`<p class="form-hint" style="color: var(--error-color, #db4437)">* Please fill in all required fields</p>`
+                  : ''}
+
                 <div class="dialog-actions">
                   <button
                     class="dialog-button cancel-button"
-                    @click=${this._hideAddMedicationDialog}
+                    @click=${() => this._hideAddMedicationDialog()}
                   >
                     Cancel
                   </button>
                   <button
                     class="dialog-button save-button"
-                    @click=${this._saveMedication}
-                    ?disabled=${!this._newMedication.name ||
-          !this._newMedication.dosage}
+                    @click=${() => this._saveMedication()}
                   >
                     Add Medication
                   </button>
@@ -1209,26 +1740,28 @@ class MedicationTrackerPanel extends LitElement {
                 </div>
 
                 <div class="form-field">
-                  <label class="form-label">Name</label>
+                  <label class="form-label required">Name</label>
                   <input
-                    class="form-input"
+                    class="form-input ${this._editFormTouched && !this._editMedication?.name ? 'invalid' : ''}"
                     type="text"
                     .value=${this._editMedication.name}
                     @input=${(e) =>
             this._updateEditMedication("name", e.target.value)}
                     placeholder="e.g., Vitamin D"
+                    required
                   />
                 </div>
 
                 <div class="form-field">
-                  <label class="form-label">Dosage</label>
+                  <label class="form-label required">Dosage</label>
                   <input
-                    class="form-input"
+                    class="form-input ${this._editFormTouched && !this._editMedication?.dosage ? 'invalid' : ''}"
                     type="text"
                     .value=${this._editMedication.dosage}
                     @input=${(e) =>
             this._updateEditMedication("dosage", e.target.value)}
                     placeholder="e.g., 1000 IU, 2 tablets"
+                    required
                   />
                 </div>
 
@@ -1310,20 +1843,135 @@ class MedicationTrackerPanel extends LitElement {
                   ></textarea>
                 </div>
 
+                <div class="form-field">
+                  <label class="form-label checkbox-label">
+                    <input
+                      type="checkbox"
+                      .checked=${this._editMedication.supply_tracking_enabled}
+                      @change=${(e) =>
+            this._updateEditMedication("supply_tracking_enabled", e.target.checked)}
+                    />
+                    Enable Supply Tracking
+                  </label>
+                </div>
+
+                ${this._editMedication.supply_tracking_enabled
+          ? html`
+                  <div class="supply-fields">
+                    <div class="form-field">
+                      <label class="form-label">Current Supply (units)</label>
+                      <input
+                        class="form-input"
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        .value=${this._editMedication.current_supply}
+                        @input=${(e) =>
+              this._updateEditMedication("current_supply", e.target.value)}
+                      />
+                    </div>
+
+                    <div class="form-field">
+                      <label class="form-label">Units Per Dose</label>
+                      <input
+                        class="form-input"
+                        type="number"
+                        min="0.5"
+                        step="0.5"
+                        .value=${this._editMedication.pills_per_dose}
+                        @input=${(e) =>
+              this._updateEditMedication("pills_per_dose", parseFloat(e.target.value) || 1)}
+                      />
+                    </div>
+
+                    <div class="form-field">
+                      <label class="form-label">Refill Reminder (days before empty)</label>
+                      <input
+                        class="form-input"
+                        type="number"
+                        min="1"
+                        .value=${this._editMedication.refill_reminder_threshold}
+                        @input=${(e) =>
+              this._updateEditMedication("refill_reminder_threshold", parseInt(e.target.value) || 7)}
+                      />
+                    </div>
+
+                    <div class="form-field">
+                      <label class="form-label checkbox-label">
+                        <input
+                          type="checkbox"
+                          .checked=${this._editMedication.show_refill_on_calendar}
+                          @change=${(e) =>
+              this._updateEditMedication("show_refill_on_calendar", e.target.checked)}
+                        />
+                        Show Refill Date on Calendar
+                      </label>
+                    </div>
+                  </div>
+                `
+          : ''}
+
+                ${this._editFormTouched && (!this._editMedication?.name || !this._editMedication?.dosage)
+                  ? html`<p class="form-hint" style="color: var(--error-color, #db4437)">* Please fill in all required fields</p>`
+                  : ''}
+
                 <div class="dialog-actions">
                   <button
                     class="dialog-button cancel-button"
-                    @click=${this._hideEditMedicationDialog}
+                    @click=${() => this._hideEditMedicationDialog()}
                   >
                     Cancel
                   </button>
                   <button
                     class="dialog-button save-button"
-                    @click=${this._updateMedication}
-                    ?disabled=${!this._editMedication.name ||
-          !this._editMedication.dosage}
+                    @click=${() => this._updateMedication()}
                   >
                     Update Medication
+                  </button>
+                </div>
+              </div>
+            </div>
+          `
+        : ""}
+
+      ${this._showRefillDialog
+        ? html`
+            <div class="dialog-overlay" @click=${this._hideRefillDialog}>
+              <div class="dialog refill-dialog" @click=${(e) => e.stopPropagation()}>
+                <div class="dialog-header">
+                  <h2 class="dialog-title">Refill Medication</h2>
+                  <button
+                    class="close-button"
+                    @click=${this._hideRefillDialog}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div class="form-field">
+                  <label class="form-label">Refill Amount (units)</label>
+                  <input
+                    class="form-input"
+                    type="number"
+                    min="0.5"
+                    step="0.5"
+                    .value=${this._refillAmount}
+                    @input=${(e) => this._refillAmount = parseFloat(e.target.value) || 30}
+                  />
+                </div>
+
+                <div class="dialog-actions">
+                  <button
+                    class="dialog-button cancel-button"
+                    @click=${() => this._hideRefillDialog()}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    class="dialog-button save-button"
+                    @click=${() => this._refillMedication()}
+                  >
+                    Refill
                   </button>
                 </div>
               </div>

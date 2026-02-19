@@ -15,7 +15,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .const import DEVICE_MANUFACTURER, DEVICE_MODEL, DOMAIN
+from .const import DEVICE_MANUFACTURER, DEVICE_MODEL, DOMAIN, EVENT_MEDICATION_LOW_SUPPLY
 from .models import MedicationData, MedicationEntry
 
 _LOGGER = logging.getLogger(__name__)
@@ -213,7 +213,19 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if taken_at is None:
             taken_at = dt_util.now()
 
+        # Check if supply was low BEFORE taking (for event firing)
+        was_low_supply = medication.is_low_supply
+
         medication.record_dose_taken(taken_at)
+
+        # Auto-decrement supply if supply tracking is enabled
+        if medication.data.supply_tracking_enabled:
+            medication.decrement_supply()
+
+            # Fire low supply event if supply just became low
+            if not was_low_supply and medication.is_low_supply:
+                self._fire_low_supply_event(medication)
+
         await self.async_save_medications()
         await self.async_refresh()
         return True
@@ -268,3 +280,95 @@ class MedicationCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def get_all_medications(self) -> dict[str, MedicationEntry]:
         """Get all medications."""
         return self._medications.copy()
+
+    async def async_refill_medication(
+        self,
+        medication_id: str,
+        refill_amount: float,
+        refill_date: datetime | None = None,
+    ) -> bool:
+        """Refill medication supply."""
+        if medication_id not in self._medications:
+            return False
+
+        medication = self._medications[medication_id]
+
+        if not medication.data.supply_tracking_enabled:
+            _LOGGER.warning(
+                "Supply tracking not enabled for medication %s", medication_id
+            )
+            return False
+
+        # Add to current supply
+        current = medication.data.current_supply or 0
+        medication.data.current_supply = current + refill_amount
+
+        # Update last refill date
+        medication.data.last_refill_date = refill_date or dt_util.now()
+
+        await self.async_save_medications()
+        await self.async_request_refresh()
+
+        _LOGGER.info(
+            "Refilled medication %s with %d units. New supply: %d",
+            medication_id,
+            refill_amount,
+            medication.data.current_supply,
+        )
+        return True
+
+    async def async_update_supply(
+        self, medication_id: str, new_supply: int
+    ) -> bool:
+        """Manually update medication supply count."""
+        if medication_id not in self._medications:
+            return False
+
+        medication = self._medications[medication_id]
+
+        if not medication.data.supply_tracking_enabled:
+            _LOGGER.warning(
+                "Supply tracking not enabled for medication %s", medication_id
+            )
+            return False
+
+        # Check if supply was low BEFORE updating (for event firing)
+        was_low_supply = medication.is_low_supply
+
+        medication.data.current_supply = new_supply
+
+        # Fire low supply event if supply just became low
+        if not was_low_supply and medication.is_low_supply:
+            self._fire_low_supply_event(medication)
+
+        await self.async_save_medications()
+        await self.async_request_refresh()
+
+        _LOGGER.info(
+            "Updated supply for medication %s to %d", medication_id, new_supply
+        )
+        return True
+
+    def _fire_low_supply_event(self, medication: MedicationEntry) -> None:
+        """Fire a Home Assistant event when medication supply becomes low."""
+        days_remaining = medication.days_of_supply_remaining
+        estimated_refill = medication.estimated_refill_date
+
+        event_data = {
+            "medication_id": medication.id,
+            "medication_name": medication.data.name,
+            "current_supply": medication.data.current_supply,
+            "pills_per_dose": medication.data.pills_per_dose,
+            "days_remaining": round(days_remaining, 1) if days_remaining else None,
+            "refill_threshold_days": medication.data.refill_reminder_threshold,
+            "estimated_refill_date": (
+                estimated_refill.isoformat() if estimated_refill else None
+            ),
+        }
+        self.hass.bus.async_fire(EVENT_MEDICATION_LOW_SUPPLY, event_data)
+        _LOGGER.info(
+            "Fired low supply event for medication %s (supply: %d, days remaining: %.1f)",
+            medication.data.name,
+            medication.data.current_supply or 0,
+            days_remaining or 0,
+        )

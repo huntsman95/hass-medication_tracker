@@ -34,6 +34,13 @@ class MedicationData:
     start_date: date | datetime | None = None
     end_date: date | datetime | None = None
     notes: str = ""
+    # Supply tracking fields
+    supply_tracking_enabled: bool = False
+    current_supply: float | None = None
+    pills_per_dose: float = 1.0
+    refill_reminder_threshold: int = 7  # days worth of supply before alerting
+    last_refill_date: date | datetime | None = None
+    show_refill_on_calendar: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -45,6 +52,15 @@ class MedicationData:
             "start_date": self.start_date.isoformat() if self.start_date else None,
             "end_date": self.end_date.isoformat() if self.end_date else None,
             "notes": self.notes,
+            # Supply tracking fields
+            "supply_tracking_enabled": self.supply_tracking_enabled,
+            "current_supply": self.current_supply,
+            "pills_per_dose": self.pills_per_dose,
+            "refill_reminder_threshold": self.refill_reminder_threshold,
+            "last_refill_date": (
+                self.last_refill_date.isoformat() if self.last_refill_date else None
+            ),
+            "show_refill_on_calendar": self.show_refill_on_calendar,
         }
 
     @classmethod
@@ -68,6 +84,17 @@ class MedicationData:
             else:
                 end_date = datetime.fromisoformat(end_date_str).date()
 
+        # Handle last_refill_date parsing
+        last_refill_date = None
+        if data.get("last_refill_date"):
+            refill_date_str = data["last_refill_date"]
+            if "T" in refill_date_str:
+                last_refill_date = dt_util.as_local(
+                    datetime.fromisoformat(refill_date_str)
+                )
+            else:
+                last_refill_date = datetime.fromisoformat(refill_date_str).date()
+
         return cls(
             name=data["name"],
             dosage=data["dosage"],
@@ -76,6 +103,13 @@ class MedicationData:
             start_date=start_date,
             end_date=end_date,
             notes=data.get("notes", ""),
+            # Supply tracking fields with backward-compatible defaults
+            supply_tracking_enabled=data.get("supply_tracking_enabled", False),
+            current_supply=data.get("current_supply"),
+            pills_per_dose=data.get("pills_per_dose", 1),
+            refill_reminder_threshold=data.get("refill_reminder_threshold", 7),
+            last_refill_date=last_refill_date,
+            show_refill_on_calendar=data.get("show_refill_on_calendar", False),
         )
 
 
@@ -677,3 +711,86 @@ class MedicationEntry:
             return 0.0
         taken_count = sum(1 for record in self.dose_history if record.taken)
         return (taken_count / len(self.dose_history)) * 100
+
+    # Supply tracking properties and methods
+
+    @property
+    def doses_per_day(self) -> float:
+        """Calculate average doses per day based on frequency."""
+        if self.data.frequency == FREQUENCY_DAILY:
+            return len(self.data.times) if self.data.times else 1
+        elif self.data.frequency == FREQUENCY_WEEKLY:
+            return 1 / 7
+        elif self.data.frequency == FREQUENCY_MONTHLY:
+            return 1 / 30
+        elif self.data.frequency == FREQUENCY_AS_NEEDED:
+            return self._calculate_as_needed_average()
+        return 1
+
+    def _calculate_as_needed_average(self) -> float:
+        """Calculate average daily doses for as-needed medications."""
+        if not self.dose_history:
+            return 0
+
+        # Look at last 30 days of history
+        now = dt_util.now()
+        cutoff = now - timedelta(days=30)
+        recent_doses = [
+            d for d in self.dose_history if d.taken and d.timestamp >= cutoff
+        ]
+
+        if not recent_doses:
+            return 0
+
+        days_span = min(
+            30, (now - min(d.timestamp for d in recent_doses)).days + 1
+        )
+        return len(recent_doses) / max(days_span, 1)
+
+    @property
+    def daily_consumption(self) -> float:
+        """Calculate daily pill consumption rate."""
+        return self.doses_per_day * self.data.pills_per_dose
+
+    @property
+    def days_of_supply_remaining(self) -> float | None:
+        """Calculate how many days of supply remain."""
+        if not self.data.supply_tracking_enabled or self.data.current_supply is None:
+            return None
+
+        daily_consumption = self.daily_consumption
+        if daily_consumption <= 0:
+            return None
+
+        return self.data.current_supply / daily_consumption
+
+    @property
+    def estimated_refill_date(self) -> date | None:
+        """Calculate estimated date when refill will be needed."""
+        days_remaining = self.days_of_supply_remaining
+        if days_remaining is None:
+            return None
+
+        return dt_util.now().date() + timedelta(days=int(days_remaining))
+
+    @property
+    def is_low_supply(self) -> bool:
+        """Check if supply is at or below threshold."""
+        if not self.data.supply_tracking_enabled or self.data.current_supply is None:
+            return False
+
+        days_remaining = self.days_of_supply_remaining
+        if days_remaining is None:
+            return False
+
+        return days_remaining <= self.data.refill_reminder_threshold
+
+    def decrement_supply(self) -> bool:
+        """Decrement supply by pills_per_dose. Returns True if successful."""
+        if not self.data.supply_tracking_enabled or self.data.current_supply is None:
+            return False
+
+        self.data.current_supply = max(
+            0, self.data.current_supply - self.data.pills_per_dose
+        )
+        return True

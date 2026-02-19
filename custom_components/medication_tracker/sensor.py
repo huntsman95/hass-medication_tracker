@@ -15,10 +15,14 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
-    DOMAIN,
+    ATTR_DAILY_CONSUMPTION,
+    ATTR_DAYS_REMAINING,
+    ATTR_ESTIMATED_REFILL_DATE,
     ATTR_LAST_TAKEN,
-    ATTR_NEXT_DUE,
     ATTR_MISSED_DOSES,
+    ATTR_NEXT_DUE,
+    ATTR_PILLS_PER_DOSE,
+    DOMAIN,
 )
 from .coordinator import MedicationCoordinator
 from .models import MedicationEntry
@@ -44,6 +48,7 @@ async def async_setup_entry(
                     MedicationStatusSensor(coordinator, medication_id, medication),
                     MedicationAdherenceSensor(coordinator, medication_id, medication),
                     MedicationIdSensor(coordinator, medication_id, medication),
+                    MedicationSupplySensor(coordinator, medication_id, medication),
                 ]
             )
 
@@ -58,6 +63,7 @@ async def async_setup_entry(
             MedicationStatusSensor(coordinator, medication_id, medication),
             MedicationAdherenceSensor(coordinator, medication_id, medication),
             MedicationIdSensor(coordinator, medication_id, medication),
+            MedicationSupplySensor(coordinator, medication_id, medication),
         ]
         async_add_entities(new_entities)
 
@@ -244,3 +250,90 @@ class MedicationIdSensor(CoordinatorEntity, SensorEntity):
             "device_id": medication.device_id,
             "medication_id": self._medication_id,
         }
+
+
+class MedicationSupplySensor(CoordinatorEntity, SensorEntity):
+    """Sensor for medication supply count."""
+
+    def __init__(
+        self,
+        coordinator: MedicationCoordinator,
+        medication_id: str,
+        medication: MedicationEntry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._medication_id = medication_id
+        self._medication = medication
+        self._attr_unique_id = f"{DOMAIN}_{medication_id}_supply"
+        self._attr_name = f"{medication.data.name} Supply"
+        self._attr_icon = "mdi:pill-multiple"
+        self._attr_native_unit_of_measurement = "units"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        # Associate with the medication device
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, medication.device_id)},
+            "name": f"{medication.data.name} Medication",
+            "manufacturer": "Home Assistant",
+            "model": "Medication Tracker",
+            "suggested_area": "Medicine Cabinet",
+        }
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available (only if supply tracking enabled)."""
+        if not self.coordinator.data:
+            return False
+        medications = self.coordinator.data.get("medications", {})
+        if self._medication_id not in medications:
+            return False
+        medication = medications[self._medication_id]
+        return medication.data.supply_tracking_enabled
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the current supply count."""
+        if self.coordinator.data:
+            medications = self.coordinator.data.get("medications", {})
+            if self._medication_id in medications:
+                medication = medications[self._medication_id]
+                if medication.data.supply_tracking_enabled:
+                    return medication.data.current_supply
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the state attributes."""
+        if not self.coordinator.data:
+            return {}
+
+        medications = self.coordinator.data.get("medications", {})
+        if self._medication_id not in medications:
+            return {}
+
+        medication = medications[self._medication_id]
+
+        if not medication.data.supply_tracking_enabled:
+            return {"medication_name": medication.data.name}
+
+        attributes = {
+            "medication_name": medication.data.name,
+            ATTR_PILLS_PER_DOSE: medication.data.pills_per_dose,
+            ATTR_DAILY_CONSUMPTION: round(medication.daily_consumption, 2),
+        }
+
+        days_remaining = medication.days_of_supply_remaining
+        if days_remaining is not None:
+            attributes[ATTR_DAYS_REMAINING] = round(days_remaining, 1)
+
+        refill_date = medication.estimated_refill_date
+        if refill_date:
+            attributes[ATTR_ESTIMATED_REFILL_DATE] = refill_date.isoformat()
+
+        if medication.data.last_refill_date:
+            attributes["last_refill_date"] = medication.data.last_refill_date.isoformat()
+
+        attributes["refill_threshold_days"] = medication.data.refill_reminder_threshold
+        attributes["show_refill_on_calendar"] = medication.data.show_refill_on_calendar
+
+        return attributes

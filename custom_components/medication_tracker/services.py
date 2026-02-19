@@ -12,14 +12,21 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    ATTR_CURRENT_SUPPLY,
     ATTR_DATETIME,
     ATTR_MEDICATION_ID,
+    ATTR_REFILL_AMOUNT,
+    CONF_CURRENT_SUPPLY,
     CONF_DOSAGE,
     CONF_END_DATE,
     CONF_FREQUENCY,
     CONF_MEDICATION_NAME,
     CONF_NOTES,
+    CONF_PILLS_PER_DOSE,
+    CONF_REFILL_REMINDER_THRESHOLD,
+    CONF_SHOW_REFILL_ON_CALENDAR,
     CONF_START_DATE,
+    CONF_SUPPLY_TRACKING_ENABLED,
     CONF_TIMES,
     DOMAIN,
     FREQUENCY_AS_NEEDED,
@@ -27,10 +34,12 @@ from .const import (
     FREQUENCY_MONTHLY,
     FREQUENCY_WEEKLY,
     SERVICE_ADD_MEDICATION,
+    SERVICE_REFILL_MEDICATION,
     SERVICE_REMOVE_MEDICATION,
     SERVICE_SKIP_MEDICATION,
     SERVICE_TAKE_MEDICATION,
     SERVICE_UPDATE_MEDICATION,
+    SERVICE_UPDATE_SUPPLY,
 )
 from .coordinator import MedicationCoordinator
 from .models import MedicationData
@@ -67,6 +76,12 @@ ADD_MEDICATION_SCHEMA = vol.Schema(
         vol.Optional(CONF_START_DATE): cv.date,
         vol.Optional(CONF_END_DATE): cv.date,
         vol.Optional(CONF_NOTES, default=""): cv.string,
+        # Supply tracking fields
+        vol.Optional(CONF_SUPPLY_TRACKING_ENABLED, default=False): cv.boolean,
+        vol.Optional(CONF_CURRENT_SUPPLY): vol.Coerce(float),
+        vol.Optional(CONF_PILLS_PER_DOSE, default=1.0): vol.Coerce(float),
+        vol.Optional(CONF_REFILL_REMINDER_THRESHOLD, default=7): cv.positive_int,
+        vol.Optional(CONF_SHOW_REFILL_ON_CALENDAR, default=False): cv.boolean,
     }
 )
 
@@ -93,6 +108,27 @@ UPDATE_MEDICATION_SCHEMA = vol.Schema(
         vol.Optional(CONF_START_DATE): cv.date,
         vol.Optional(CONF_END_DATE): cv.date,
         vol.Optional(CONF_NOTES): cv.string,
+        # Supply tracking fields
+        vol.Optional(CONF_SUPPLY_TRACKING_ENABLED): cv.boolean,
+        vol.Optional(CONF_CURRENT_SUPPLY): vol.Coerce(float),
+        vol.Optional(CONF_PILLS_PER_DOSE): vol.Coerce(float),
+        vol.Optional(CONF_REFILL_REMINDER_THRESHOLD): cv.positive_int,
+        vol.Optional(CONF_SHOW_REFILL_ON_CALENDAR): cv.boolean,
+    }
+)
+
+REFILL_MEDICATION_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_MEDICATION_ID): cv.string,
+        vol.Required(ATTR_REFILL_AMOUNT): vol.Coerce(float),
+        vol.Optional(ATTR_DATETIME): cv.datetime,
+    }
+)
+
+UPDATE_SUPPLY_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_MEDICATION_ID): cv.string,
+        vol.Required(ATTR_CURRENT_SUPPLY): vol.Coerce(float),
     }
 )
 
@@ -168,6 +204,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             start_date=start_date,
             end_date=end_date,
             notes=call.data.get(CONF_NOTES, ""),
+            # Supply tracking fields
+            supply_tracking_enabled=call.data.get(CONF_SUPPLY_TRACKING_ENABLED, False),
+            current_supply=call.data.get(CONF_CURRENT_SUPPLY),
+            pills_per_dose=call.data.get(CONF_PILLS_PER_DOSE, 1),
+            refill_reminder_threshold=call.data.get(CONF_REFILL_REMINDER_THRESHOLD, 7),
+            show_refill_on_calendar=call.data.get(CONF_SHOW_REFILL_ON_CALENDAR, False),
         )
 
         medication_id = await coordinator.async_add_medication(medication_data)
@@ -228,6 +270,26 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             start_date=start_date,
             end_date=end_date,
             notes=call.data.get(CONF_NOTES, current_medication.data.notes),
+            # Supply tracking fields
+            supply_tracking_enabled=call.data.get(
+                CONF_SUPPLY_TRACKING_ENABLED,
+                current_medication.data.supply_tracking_enabled,
+            ),
+            current_supply=call.data.get(
+                CONF_CURRENT_SUPPLY, current_medication.data.current_supply
+            ),
+            pills_per_dose=call.data.get(
+                CONF_PILLS_PER_DOSE, current_medication.data.pills_per_dose
+            ),
+            refill_reminder_threshold=call.data.get(
+                CONF_REFILL_REMINDER_THRESHOLD,
+                current_medication.data.refill_reminder_threshold,
+            ),
+            last_refill_date=current_medication.data.last_refill_date,
+            show_refill_on_calendar=call.data.get(
+                CONF_SHOW_REFILL_ON_CALENDAR,
+                current_medication.data.show_refill_on_calendar,
+            ),
         )
 
         success = await coordinator.async_update_medication(medication_id, updated_data)
@@ -235,6 +297,47 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.info("Updated medication %s (%s)", medication_id, updated_data.name)
         else:
             _LOGGER.error("Failed to update medication %s", medication_id)
+
+    async def handle_refill_medication(call: ServiceCall) -> None:
+        """Handle refill medication service call."""
+        medication_id = call.data[ATTR_MEDICATION_ID]
+        refill_amount = call.data[ATTR_REFILL_AMOUNT]
+        refill_date = call.data.get(ATTR_DATETIME)
+
+        # Convert naive datetime to timezone-aware datetime if needed
+        if refill_date is not None and refill_date.tzinfo is None:
+            refill_date = dt_util.as_local(refill_date)
+
+        coordinator = _get_coordinator_for_medication(hass, medication_id)
+        if coordinator:
+            success = await coordinator.async_refill_medication(
+                medication_id, refill_amount, refill_date
+            )
+            if success:
+                _LOGGER.info(
+                    "Refilled medication %s with %d units", medication_id, refill_amount
+                )
+            else:
+                _LOGGER.error("Failed to refill medication %s", medication_id)
+        else:
+            _LOGGER.error("Medication %s not found", medication_id)
+
+    async def handle_update_supply(call: ServiceCall) -> None:
+        """Handle update supply service call."""
+        medication_id = call.data[ATTR_MEDICATION_ID]
+        new_supply = call.data[ATTR_CURRENT_SUPPLY]
+
+        coordinator = _get_coordinator_for_medication(hass, medication_id)
+        if coordinator:
+            success = await coordinator.async_update_supply(medication_id, new_supply)
+            if success:
+                _LOGGER.info(
+                    "Updated supply for medication %s to %d", medication_id, new_supply
+                )
+            else:
+                _LOGGER.error("Failed to update supply for medication %s", medication_id)
+        else:
+            _LOGGER.error("Medication %s not found", medication_id)
 
     hass.services.async_register(
         DOMAIN,
@@ -271,6 +374,20 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         schema=UPDATE_MEDICATION_SCHEMA,
     )
 
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_REFILL_MEDICATION,
+        handle_refill_medication,
+        schema=REFILL_MEDICATION_SCHEMA,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_UPDATE_SUPPLY,
+        handle_update_supply,
+        schema=UPDATE_SUPPLY_SCHEMA,
+    )
+
 
 def _get_coordinator_for_medication(
     hass: HomeAssistant, medication_id: str
@@ -305,3 +422,5 @@ async def async_unload_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, SERVICE_ADD_MEDICATION)
     hass.services.async_remove(DOMAIN, SERVICE_REMOVE_MEDICATION)
     hass.services.async_remove(DOMAIN, SERVICE_UPDATE_MEDICATION)
+    hass.services.async_remove(DOMAIN, SERVICE_REFILL_MEDICATION)
+    hass.services.async_remove(DOMAIN, SERVICE_UPDATE_SUPPLY)
