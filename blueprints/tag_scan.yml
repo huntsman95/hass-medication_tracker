@@ -1,0 +1,41 @@
+blueprint:
+  name: Medication Tracker - Tag Scan
+  description: >
+    Marks a medication as taken when a selected tag is scanned.
+  domain: automation
+
+  input:
+    medication_tag:
+      name: Medication Tag
+      selector:
+        entity:
+          filter:
+            - domain: tag
+
+    medication_button:
+      name: Medication
+      selector:
+        entity:
+          filter:
+            - domain: button
+              integration: medication_tracker
+
+variables:
+  selected_tag: !input medication_tag
+
+triggers:
+  - trigger: event
+    event_type: tag_scanned
+
+conditions:
+  - condition: template
+    value_template: >
+      {{ trigger.event.data.tag_id == state_attr(selected_tag, 'tag_id') }}
+
+actions:
+
+  - action: button.press
+    target:
+      entity_id: !input medication_button
+
+mode: single
